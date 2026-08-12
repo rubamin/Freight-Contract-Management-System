@@ -1,0 +1,232 @@
+/* =========================================
+   Google Font
+========================================= */
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap");
+
+/* =========================================
+   Root Variables
+========================================= */
+
+:root {
+  --primary: #1e3a8a;
+  --secondary: #2563eb;
+
+  --sidebar: #1e293b;
+
+  --background: #f4f7fc;
+
+  --card: #ffffff;
+
+  --text: #1f2937;
+
+  --text-light: #6b7280;
+
+  --border: #e5e7eb;
+
+  --radius: 12px;
+
+  --transition: 0.25s ease;
+
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+
+  --shadow-lg: 0 14px 40px rgba(15, 23, 42, 0.12);
+}
+
+/* =========================================
+   Reset
+========================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* =========================================
+   Body
+========================================= */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+
+  background: var(--background);
+
+  color: var(--text);
+
+  overflow-x: hidden;
+
+  -webkit-font-smoothing: antialiased;
+
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* =========================================
+   Links
+========================================= */
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* =========================================
+   Images
+========================================= */
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* =========================================
+   Scrollbar
+========================================= */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #edf2f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 50px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* =========================================
+   Selection
+========================================= */
+
+::selection {
+  background: #2563eb;
+  color: white;
+}
+
+/* =========================================
+   Transition
+========================================= */
+
+button,
+input,
+textarea,
+select,
+a,
+.MuiPaper-root,
+.MuiCard-root {
+  transition: all 0.25s ease;
+}
+
+/* =========================================
+   Utility Classes
+========================================= */
+
+.page-container {
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.page-subtitle {
+  color: var(--text-light);
+  margin-top: 4px;
+}
+
+.card-shadow {
+  box-shadow: var(--shadow-md);
+}
+
+.radius {
+  border-radius: var(--radius);
+}
+
+.text-muted {
+  color: var(--text-light);
+}
+
+.full-width {
+  width: 100%;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =========================================
+   Animation
+========================================= */
+
+.fade-in {
+  animation: fadeIn .35s ease;
+}
+
+@keyframes fadeIn {
+
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+}
+
+/* =========================================
+   Responsive
+========================================= */
+
+@media (max-width:900px) {
+
+  .page-container {
+    padding: 16px;
+  }
+
+}
+
+@media (max-width:600px) {
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .page-container {
+    padding: 12px;
+  }
+
+}
