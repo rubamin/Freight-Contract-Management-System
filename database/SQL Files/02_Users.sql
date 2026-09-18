@@ -1,0 +1,14 @@
+CREATE TABLE Users
+(
+    UserID INT IDENTITY PRIMARY KEY,
+    RoleID INT NOT NULL,
+    FullName NVARCHAR(200),
+    Email NVARCHAR(200) NOT NULL UNIQUE,
+    PasswordHash NVARCHAR(MAX),
+    MobileNo VARCHAR(20),
+    IsActive BIT DEFAULT 1,
+    LastLogin DATETIME,
+    CreatedAt DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY(RoleID)
+    REFERENCES Roles(RoleID)
+);
