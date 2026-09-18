@@ -1,6 +1,10 @@
+<<<<<<< HEAD
 const XLSX = require("xlsx");
 const crudService = require("../services/crud.service");
 const { describeSequelizeError } = require("../utils/dbErrorHelper");
+=======
+const crudService = require("../services/crud.service");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 const getAll = async (req, res) => {
   try {
@@ -53,7 +57,11 @@ const create = async (req, res) => {
   } catch (error) {
     return res.status(400).json({
       success: false,
+<<<<<<< HEAD
       message: describeSequelizeError(error),
+=======
+      message: error.message,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     });
   }
 };
@@ -82,7 +90,11 @@ const update = async (req, res) => {
   } catch (error) {
     return res.status(400).json({
       success: false,
+<<<<<<< HEAD
       message: describeSequelizeError(error),
+=======
+      message: error.message,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     });
   }
 };
@@ -114,6 +126,7 @@ const remove = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 // Generic bulk-upload endpoint (task item 11). Only enabled for modules
 // whose registry entry defines `bulkUploadFields` - moduleRouteFactory
 // only mounts this route for those modules in the first place, but the
@@ -162,11 +175,17 @@ const bulkUpload = async (req, res) => {
   }
 };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 module.exports = {
   getAll,
   getById,
   create,
   update,
   remove,
+<<<<<<< HEAD
   bulkUpload,
 };
+=======
+};
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

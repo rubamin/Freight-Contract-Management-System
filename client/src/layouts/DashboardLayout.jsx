@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from "react";
+=======
+import React, { useState } from "react";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import {
   AppBar,
   Avatar,
@@ -13,16 +17,24 @@ import {
   Typography,
   Menu,
   MenuItem,
+<<<<<<< HEAD
   IconButton,
   Tooltip,
 } from "@mui/material";
 
 import {
   Dashboard as DashboardIcon,
+=======
+} from "@mui/material";
+
+import {
+  Dashboard,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   Logout,
   People,
   AccountCircle,
   KeyboardArrowDown,
+<<<<<<< HEAD
   Person,
   Settings,
   Assessment,
@@ -35,10 +47,13 @@ import {
   Groups,
   ManageAccounts,
   Menu as MenuIcon,
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 } from "@mui/icons-material";
 
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+<<<<<<< HEAD
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 
@@ -77,6 +92,30 @@ const ALL_NAVIGATION_ITEMS = [
 
 const DashboardLayout = () => {
   const theme = useTheme();
+=======
+
+import { logout } from "../redux/slices/authSlice";
+import { moduleNavigation } from "../constants/moduleConfigs";
+
+// Define fixed sidebar width
+const drawerWidth = 270;
+
+// Combine static navigation items and dynamic configuration modules
+const navigationItems = [
+  {
+    label: "Vendor Master",
+    path: "/vendors",
+    icon: <People />,
+  },
+  ...moduleNavigation.map((item) => ({
+    label: item.title,
+    path: item.path,
+    icon: <Dashboard />,
+  })),
+];
+
+const DashboardLayout = () => {
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +123,7 @@ const DashboardLayout = () => {
   // Extract authenticated user details from Redux state
   const { user } = useSelector((state) => state.auth);
 
+<<<<<<< HEAD
   // Module permissions drive which sidebar items render (task item 3).
   // Admins get every item; everyone else only sees modules where
   // CanView is true. Defaults to just the ungated items (Dashboard,
@@ -132,6 +172,8 @@ const DashboardLayout = () => {
     setIsSidebarCollapsed((prev) => !prev);
   };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   // Profile menu anchor state
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
@@ -172,19 +214,27 @@ const DashboardLayout = () => {
           ml: `${drawerWidth}px`,
           width: `calc(100% - ${drawerWidth}px)`,
           height: 72,
+<<<<<<< HEAD
           transition: "margin-left 0.2s ease, width 0.2s ease",
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
         <Toolbar
           sx={{
             minHeight: "72px !important",
+<<<<<<< HEAD
             px: { xs: 2, sm: 3 },
+=======
+            px: 3,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
+<<<<<<< HEAD
           {/* Hamburger toggle - mobile only, opens the overlay sidebar */}
           {isMobile && (
             <IconButton
@@ -196,13 +246,19 @@ const DashboardLayout = () => {
             </IconButton>
           )}
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           {/* Dynamic Page Title Section */}
           <Box>
             <Typography
               variant="h6"
               sx={{
                 fontWeight: 600,
+<<<<<<< HEAD
                 color: theme.palette.text.primary,
+=======
+                color: "#1E293B",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
               }}
             >
               {pageTitle}
@@ -211,8 +267,11 @@ const DashboardLayout = () => {
 
           {/* User Profile Trigger Section */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+<<<<<<< HEAD
             <NotificationCenter />
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             <Box
               onClick={handleMenuOpen}
               sx={{
@@ -276,12 +335,15 @@ const DashboardLayout = () => {
                 </Typography>
               </Box>
               <Divider sx={{ my: 0.5 }} />
+<<<<<<< HEAD
               <MenuItem onClick={() => { handleMenuClose(); navigate("/profile"); }}>
                 <ListItemIcon sx={{ minWidth: 30 }}>
                   <Person fontSize="small" />
                 </ListItemIcon>
                 My Profile
               </MenuItem>
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
               <MenuItem onClick={handleLogoutClick} sx={{ color: "#DC2626" }}>
                 <ListItemIcon sx={{ color: "#DC2626", minWidth: 30 }}>
                   <Logout fontSize="small" />
@@ -295,6 +357,7 @@ const DashboardLayout = () => {
 
       {/* ===================== Sidebar Navigation Drawer ===================== */}
       <Drawer
+<<<<<<< HEAD
         variant={isMobile ? "temporary" : "permanent"}
         open={isMobile ? mobileDrawerOpen : true}
         onClose={() => setMobileDrawerOpen(false)}
@@ -311,11 +374,24 @@ const DashboardLayout = () => {
             boxShadow: "4px 0 18px rgba(0,0,0,.08)",
             overflowX: "hidden",
             transition: "width 0.2s ease",
+=======
+        variant="permanent"
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            bgcolor: "#1E293B",
+            color: "#FFFFFF",
+            borderRight: 0,
+            boxShadow: "4px 0 18px rgba(0,0,0,.08)",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           },
         }}
       >
         <Toolbar />
 
+<<<<<<< HEAD
         {/* Brand Header + Collapse Toggle */}
         <Box
           sx={{
@@ -344,11 +420,19 @@ const DashboardLayout = () => {
               </IconButton>
             </Tooltip>
           )}
+=======
+        {/* Brand Header */}
+        <Box sx={{ px: 3, py: 2, width: "100%" }}>
+          <Typography variant="h5" fontWeight={700}>
+            Freight Contract Management
+          </Typography>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         </Box>
 
         <Divider sx={{ borderColor: "rgba(255,255,255,.08)" }} />
 
         {/* Navigation List Links */}
+<<<<<<< HEAD
         <List sx={{ px: isSidebarCollapsed ? 1 : 2, mt: 2 }}>
           {navigationItems.map((item) => {
             const active = location.pathname.startsWith(item.path);
@@ -360,10 +444,21 @@ const DashboardLayout = () => {
                   navigate(item.path);
                   if (isMobile) setMobileDrawerOpen(false);
                 }}
+=======
+        <List sx={{ px: 2, mt: 2 }}>
+          {navigationItems.map((item) => {
+            const active = location.pathname.startsWith(item.path);
+
+            return (
+              <ListItemButton
+                key={item.path}
+                onClick={() => navigate(item.path)}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                 selected={active}
                 sx={{
                   borderRadius: 2,
                   mb: 1,
+<<<<<<< HEAD
                   justifyContent: isSidebarCollapsed ? "center" : "flex-start",
                   color: active ? "#FFFFFF" : theme.palette.sidebar.textMuted,
                   bgcolor: active ? theme.palette.sidebar.activeItem : "transparent",
@@ -375,6 +470,18 @@ const DashboardLayout = () => {
                     bgcolor: theme.palette.sidebar.activeItem,
                     "&:hover": {
                       bgcolor: theme.palette.sidebar.activeItem,
+=======
+                  color: active ? "#FFFFFF" : "#CBD5E1",
+                  bgcolor: active ? "#2563EB" : "transparent",
+                  "&:hover": {
+                    bgcolor: "#2563EB",
+                    color: "#FFFFFF",
+                  },
+                  "&.Mui-selected": {
+                    bgcolor: "#2563EB",
+                    "&:hover": {
+                      bgcolor: "#2563EB",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                     },
                   },
                 }}
@@ -382,12 +489,17 @@ const DashboardLayout = () => {
                 <ListItemIcon
                   sx={{
                     color: "inherit",
+<<<<<<< HEAD
                     minWidth: isSidebarCollapsed ? 0 : 40,
                     justifyContent: "center",
+=======
+                    minWidth: 40,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                   }}
                 >
                   {item.icon}
                 </ListItemIcon>
+<<<<<<< HEAD
                 {!isSidebarCollapsed && (
                   <ListItemText
                     primary={item.label}
@@ -408,6 +520,18 @@ const DashboardLayout = () => {
             ) : (
               <React.Fragment key={item.path}>{listItemButton}</React.Fragment>
             );
+=======
+                <ListItemText
+                  primary={item.label}
+                  sx={{
+                    "& .MuiListItemText-primary": {
+                      fontWeight: active ? 600 : 500,
+                    },
+                  }}
+                />
+              </ListItemButton>
+            );
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           })}
         </List>
       </Drawer>
@@ -417,6 +541,7 @@ const DashboardLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
+<<<<<<< HEAD
           // Bug fix (task item 21): the permanent Drawer right above this
           // Box is already a normal flex child (flexShrink: 0, width:
           // drawerWidth) in this Box's parent flex row, so it already
@@ -438,6 +563,17 @@ const DashboardLayout = () => {
         <Box sx={{ maxWidth: "1800px", mx: "auto" }}>
           <Outlet />
         </Box>
+=======
+          ml: `${drawerWidth}px`,
+          mt: "75px",
+          p: 3,
+          minHeight: "100vh",
+          maxWidth: "1800px",
+          mx: "auto",
+        }}
+      >
+        <Outlet />
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       </Box>
     </Box>
   );

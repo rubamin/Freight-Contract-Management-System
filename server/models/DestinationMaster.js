@@ -1,6 +1,9 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+<<<<<<< HEAD
 const { lookupDistrictForCity } = require("../constants/indiaCityDistrictLookup");
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 const DestinationMaster = sequelize.define(
   "DestinationMaster",
@@ -12,6 +15,7 @@ const DestinationMaster = sequelize.define(
     },
     City: {
       type: DataTypes.STRING(200),
+<<<<<<< HEAD
       allowNull: false,
     },
     // Auto-filled from City via the lookup below (task item 7) - no longer
@@ -31,6 +35,18 @@ const DestinationMaster = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+=======
+    },
+    District: {
+      type: DataTypes.STRING(200),
+    },
+    State: {
+      type: DataTypes.STRING(200),
+      defaultValue: "Gujarat",
+    },
+    Pincode: {
+      type: DataTypes.STRING(10),
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     },
   },
   {
@@ -39,6 +55,7 @@ const DestinationMaster = sequelize.define(
     indexes: [
       {
         unique: true,
+<<<<<<< HEAD
         fields: ["City", "State"],
       },
     ],
@@ -66,6 +83,11 @@ const DestinationMaster = sequelize.define(
         }
       },
     },
+=======
+        fields: ["City", "State", "Pincode"],
+      },
+    ],
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   }
 );
 

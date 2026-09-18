@@ -46,6 +46,7 @@ export const removeModuleRecord = createAsyncThunk(
   }
 );
 
+<<<<<<< HEAD
 export const fetchModuleRecordById = createAsyncThunk(
   "module/fetchModuleRecordById",
   async ({ config, id }, { rejectWithValue }) => {
@@ -110,6 +111,12 @@ const initialState = {
   currentRecord: null,
   loading: false,
   saving: false,
+=======
+const initialState = {
+  recordsByModule: {},
+  totalRecordsByModule: {},
+  loading: false,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   error: null,
 };
 
@@ -120,9 +127,12 @@ const moduleSlice = createSlice({
     clearModuleError(state) {
       state.error = null;
     },
+<<<<<<< HEAD
     clearCurrentModuleRecord(state) {
       state.currentRecord = null;
     },
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   },
   extraReducers: (builder) => {
     builder
@@ -146,6 +156,7 @@ const moduleSlice = createSlice({
           (record) =>
             record[action.payload.idField] !== action.payload.id
         );
+<<<<<<< HEAD
       })
       .addCase(fetchModuleRecordById.pending, (state) => {
         state.loading = true;
@@ -180,10 +191,16 @@ const moduleSlice = createSlice({
       .addCase(updateModuleRecord.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload;
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       });
   },
 });
 
+<<<<<<< HEAD
 export const { clearModuleError, clearCurrentModuleRecord } = moduleSlice.actions;
+=======
+export const { clearModuleError } = moduleSlice.actions;
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 export default moduleSlice.reducer;

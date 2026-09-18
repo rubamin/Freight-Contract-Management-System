@@ -6,9 +6,14 @@ import {
   Paper,
   TextField,
   InputAdornment,
+<<<<<<< HEAD
   Button,
 } from "@mui/material";
 import { Delete, Edit, Search, ToggleOff, CloudUpload } from "@mui/icons-material";
+=======
+} from "@mui/material";
+import { Delete, Search } from "@mui/icons-material";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import { DataGrid } from "@mui/x-data-grid";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -16,11 +21,16 @@ import PageHeader from "../../components/common/PageHeader";
 import DeleteDialog from "../../components/common/DeleteDialog";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 import AppSnackbar from "../../components/common/AppSnackbar";
+<<<<<<< HEAD
 import BulkUploadModal from "../../components/common/BulkUploadModal";
 import useDebounce from "../../hooks/useDebounce";
 import usePermissions from "../../hooks/usePermissions";
 import { moduleConfigs } from "../../constants/moduleConfigs";
 import * as moduleService from "../../services/moduleService";
+=======
+import useDebounce from "../../hooks/useDebounce";
+import { moduleConfigs } from "../../constants/moduleConfigs";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import {
   fetchModuleRecords,
   removeModuleRecord,
@@ -28,7 +38,10 @@ import {
 
 const ModuleList = ({ configKey }) => {
   const config = moduleConfigs[configKey];
+<<<<<<< HEAD
   const { canEdit, loaded: permissionsLoaded } = usePermissions();
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { recordsByModule, totalRecordsByModule, loading, error } =
@@ -39,10 +52,13 @@ const ModuleList = ({ configKey }) => {
   const [pageSize, setPageSize] = useState(10);
   const [selectedRecordId, setSelectedRecordId] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
+<<<<<<< HEAD
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [bulkUploadFile, setBulkUploadFile] = useState(null);
   const [bulkUploadMessage, setBulkUploadMessage] = useState(null);
   const [bulkUploadProcessing, setBulkUploadProcessing] = useState(false);
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   const debouncedSearch = useDebounce(search, 500);
   const stateKey = config.stateKey || config.moduleName;
@@ -87,6 +103,7 @@ const ModuleList = ({ configKey }) => {
       },
     }));
 
+<<<<<<< HEAD
     // Table column order standard (task item 8): Sr. No. first, data
     // columns in the middle, Action always last. Sr. No. is a simple
     // page-relative row index (page * pageSize + row position), not the
@@ -128,11 +145,23 @@ const ModuleList = ({ configKey }) => {
             // Masters with softDeleteOnly show a deactivate icon instead of
             // a trash icon, since the action flips IsActive rather than
             // permanently removing the record (task item 4/7).
+=======
+    return [
+      {
+        field: "Action",
+        headerName: "Action",
+        width: 90,
+        sortable: false,
+        renderCell: (params) => (
+          <IconButton
+            color="error"
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             onClick={() => {
               setSelectedRecordId(params.row[config.idField]);
               setDeleteDialog(true);
             }}
           >
+<<<<<<< HEAD
             {config.softDeleteOnly ? <ToggleOff fontSize="small" /> : <Delete fontSize="small" />}
           </IconButton>
         </>
@@ -141,6 +170,15 @@ const ModuleList = ({ configKey }) => {
 
     return [srNoColumn, ...dataColumns, actionColumn];
   }, [config, navigate, rows, page, pageSize, permissionsLoaded, canEdit]);
+=======
+            <Delete />
+          </IconButton>
+        ),
+      },
+      ...dataColumns,
+    ];
+  }, [config]);
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   const handleDeleteConfirm = async () => {
     const result = await dispatch(
@@ -156,6 +194,7 @@ const ModuleList = ({ configKey }) => {
     }
   };
 
+<<<<<<< HEAD
   // Bulk Excel upload (task item 11) - only shown for modules whose config
   // opts in via bulkUploadFields (never Contract Master or Invoices).
   const handleDownloadTemplate = () => {
@@ -196,6 +235,8 @@ const ModuleList = ({ configKey }) => {
     }
   };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   return (
     <Box p={3}>
       <PageHeader
@@ -203,7 +244,11 @@ const ModuleList = ({ configKey }) => {
         breadcrumbs={[
           {
             label: "Dashboard",
+<<<<<<< HEAD
             path: "/dashboard",
+=======
+            path: "/vendors",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           },
           {
             label: config.title,
@@ -215,7 +260,11 @@ const ModuleList = ({ configKey }) => {
         }
       />
 
+<<<<<<< HEAD
       <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, alignItems: "center" }}>
+=======
+      <Paper sx={{ p: 2, mb: 2 }}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         <TextField
           fullWidth
           size="small"
@@ -230,6 +279,7 @@ const ModuleList = ({ configKey }) => {
             ),
           }}
         />
+<<<<<<< HEAD
         {config.bulkUploadFields && (
           <Button
             variant="outlined"
@@ -240,6 +290,8 @@ const ModuleList = ({ configKey }) => {
             Bulk Upload
           </Button>
         )}
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       </Paper>
 
       <Paper>
@@ -266,12 +318,17 @@ const ModuleList = ({ configKey }) => {
 
       <DeleteDialog
         open={deleteDialog}
+<<<<<<< HEAD
         title={config.softDeleteOnly ? `Deactivate ${config.title}` : `Delete ${config.title}`}
         message={
           config.softDeleteOnly
             ? "Are you sure you want to deactivate this record? It will no longer appear as an option elsewhere, but historical records that reference it are unaffected."
             : "Are you sure you want to delete this record?"
         }
+=======
+        title={`Delete ${config.title}`}
+        message="Are you sure you want to delete this record?"
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         onClose={() => setDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
       />
@@ -284,6 +341,7 @@ const ModuleList = ({ configKey }) => {
         message={error}
         onClose={() => {}}
       />
+<<<<<<< HEAD
 
       {config.bulkUploadFields && (
         <BulkUploadModal
@@ -302,6 +360,8 @@ const ModuleList = ({ configKey }) => {
           onSubmit={handleBulkUploadSubmit}
         />
       )}
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     </Box>
   );
 };

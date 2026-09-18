@@ -34,9 +34,12 @@ import {
     GridOn as GridOnIcon,
     Save as SaveIcon
 } from '@mui/icons-material';
+<<<<<<< HEAD
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { parseDateForApi, toDayjsValue, DISPLAY_DATE_FORMAT } from '../../utils/dateFormat';
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 // --- CONFIGURATION & CONSTANTS ---
 const MAX_ROWS = 25;
@@ -52,24 +55,49 @@ const ALLOWED_FILE_TYPES = [
 ];
 const MAX_FILE_SIZE_MB = 5;
 
+<<<<<<< HEAD
 // Vehicle types are now sourced from the Vehicle Type Master via
 // masterReferences.vehicleTypes (task item 9) rather than this hardcoded
 // list, which used to silently diverge from the actual master data.
+=======
+const VEHICLE_TYPES = [
+    'Open Truck 10-Tyre',
+    'Open Truck 6-Tyre',
+    'Container 20ft',
+    'Container 40ft',
+    'Trailer High Bed',
+    'Trailer Low Bed',
+    'LCV / Tempo'
+];
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 const createEmptyRow = (id, locationName = '') => ({
     id,
     locationName,
+<<<<<<< HEAD
     vendorId: null,
     vendorName: '',
     gstNo: '',
     vendorGstId: null,
+=======
+    gstNo: '',
+    vendorGstId: null,
+    vendorId: null,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     customerName: '',
     invoiceBillNo: '',
     invoiceBillDate: '',
     lrDate: '',
     lrNo: '',
+<<<<<<< HEAD
     vehicleType: '',
     vehicleTypeId: '',
+=======
+    vehicleNo: '',
+    vehicleType: '',
+    vehicleTypeId: '',
+    from: '',
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     to: '',
     actualWeightMT: '',
     freightCharge: '',
@@ -84,6 +112,7 @@ const createEmptyRow = (id, locationName = '') => ({
 });
 
 // --- REUSABLE AUTOCOMPLETE CELL COMPONENT ---
+<<<<<<< HEAD
 // freeSolo defaults to true (existing behavior for GST/Customer cells, where
 // typing a new value is allowed). Pass freeSolo={false} for cells that must
 // only accept a value from the provided options list (e.g. ToStation).
@@ -100,6 +129,16 @@ const EditableAutocompleteCell = ({ value, options, placeholder, onChange, freeS
                 // an actual option is selected.
                 if (freeSolo) onChange(val || '');
             }}
+=======
+const EditableAutocompleteCell = ({ value, options, placeholder, onChange }) => {
+    return (
+        <Autocomplete
+            freeSolo
+            options={options}
+            value={value || ''}
+            onChange={(e, val) => onChange(val || '')}
+            onInputChange={(e, val) => onChange(val || '')}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             renderInput={(params) => (
                 <TextField
                     {...params}
@@ -133,6 +172,7 @@ export default function AddInvoice() {
 
     // Dynamic Master References fetched from backend API
     const [masterReferences, setMasterReferences] = useState({
+<<<<<<< HEAD
         vendors: [],    // [{ VendorID, VendorName }] — active vendors only
         vendorGsts: [], // [{ VendorGSTID, GSTNumber, VendorID, IsDefault }]
         customers: [],  // sourced from CustomerMaster (task item 6)
@@ -142,6 +182,12 @@ export default function AddInvoice() {
         // full master lists below, never restricted to a specific
         // contract's rate matrix.
         vehicleTypes: [] // sourced from Vehicle Type Master, replacing the old hardcoded VEHICLE_TYPES list
+=======
+        vendorGsts: [], // [{ VendorGSTID, GSTNumber, VendorID }]
+        customers: [],  // fetched dynamically from InvoiceHeader CustomerName
+        fromStations: [],
+        toStations: []
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     });
 
     // Spreadsheet Grid State
@@ -195,7 +241,11 @@ export default function AddInvoice() {
                     });
                 }
 
+<<<<<<< HEAD
                 // 2. Fetch Invoice Suggestions (VendorGSTs, To Stations, and Customers from database)
+=======
+                // 2. Fetch Invoice Suggestions (VendorGSTs, From, To Stations, and Customers from database)
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                 try {
                     const suggestionRes = await fetch('http://localhost:5000/api/invoices/invoice-suggestions', { method: 'GET', headers });
                     if (suggestionRes.ok && isMounted) {
@@ -203,9 +253,15 @@ export default function AddInvoice() {
                         const sData = sJson.data || {};
                         setMasterReferences(prev => ({
                             ...prev,
+<<<<<<< HEAD
                             vendors: sData.vendors || [],
                             vendorGsts: sData.vendorGsts || [],
                             customers: sData.customers || [],
+=======
+                            vendorGsts: sData.vendorGsts || [],
+                            customers: sData.customers || [],
+                            fromStations: sData.fromStations || [],
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                             toStations: sData.toStations || []
                         }));
                     }
@@ -213,6 +269,7 @@ export default function AddInvoice() {
                     console.warn("Could not fetch invoice suggestions API", err);
                 }
 
+<<<<<<< HEAD
                 // Fetch Vehicle Type Master (task item 9's Vehicle Type sourcing
                 // still applies; only the Contract No selector itself was
                 // removed per task item 13 - replaces the old hardcoded
@@ -230,6 +287,8 @@ export default function AddInvoice() {
                     console.warn("Could not fetch vehicle types", err);
                 }
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             } catch (error) {
                 console.error("Failed to load master references", error);
             }
@@ -282,6 +341,10 @@ export default function AddInvoice() {
             let updatedRow = { ...row, [field]: value };
 
             if (field === 'gstNo') updatedRow.gstNo = value.toUpperCase().trim();
+<<<<<<< HEAD
+=======
+            if (field === 'vehicleNo') updatedRow.vehicleNo = value.toUpperCase().trim();
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
             if (field === 'actualWeightMT') {
                 let numVal = parseFloat(value) || 0;
@@ -303,6 +366,7 @@ export default function AddInvoice() {
         }));
     };
 
+<<<<<<< HEAD
     // CUSTOMER SELECTION: updates the row's customer name and, when the typed/
     // selected name isn't already in the Customer Master list, creates it via
     // the inline "+ Add Customer" endpoint so it becomes a reusable master
@@ -370,6 +434,12 @@ export default function AddInvoice() {
         const matchedVendor = foundRecord
             ? masterReferences.vendors.find(v => Number(v.VendorID) === Number(foundRecord.VendorID))
             : null;
+=======
+    // GST SELECTION: Match VendorGST table data and automatically extract VendorGSTID and VendorID
+    const handleGstSelect = (id, gstValue) => {
+        const cleanGst = (gstValue || '').toUpperCase().trim();
+        const foundRecord = masterReferences.vendorGsts.find(v => (v.GSTNumber || '').toUpperCase() === cleanGst);
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
         setRows(rows.map(row => {
             if (row.id !== id) return row;
@@ -377,6 +447,7 @@ export default function AddInvoice() {
                 ...row,
                 gstNo: cleanGst,
                 vendorGstId: foundRecord ? foundRecord.VendorGSTID : null,
+<<<<<<< HEAD
                 vendorId: foundRecord ? foundRecord.VendorID : row.vendorId,
                 vendorName: matchedVendor ? matchedVendor.VendorName : row.vendorName
             };
@@ -403,6 +474,9 @@ export default function AddInvoice() {
                 vendorName,
                 gstNo: defaultGst ? (defaultGst.GSTNumber || '').toUpperCase().trim() : '',
                 vendorGstId: defaultGst ? defaultGst.VendorGSTID : null
+=======
+                vendorId: foundRecord ? foundRecord.VendorID : null
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             };
         }));
     };
@@ -447,6 +521,7 @@ export default function AddInvoice() {
 
     const totalValidRows = useMemo(() => rows.filter(r => r.invoiceBillNo.trim() !== '').length, [rows]);
 
+<<<<<<< HEAD
     // Customer Name is only mandatory on a row once that row carries a
     // Detain Charge or Extra Charge - otherwise it stays optional.
     const isCustomerNameMissing = (row) => {
@@ -458,11 +533,17 @@ export default function AddInvoice() {
     // --- FINAL VALIDATION & SUBMISSION ---
     const handleSaveInvoices = async () => {
          const validRows = rows.filter(r => r.invoiceBillNo.trim() !== '');
+=======
+    // --- FINAL VALIDATION & SUBMISSION ---
+    const handleSaveInvoices = async () => {
+        const validRows = rows.filter(r => r.invoiceBillNo.trim() !== '');
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         if (validRows.length === 0) {
             setSnackbar({ open: true, message: 'Please enter at least one valid invoice row.', severity: 'error' });
             return;
         }
 
+<<<<<<< HEAD
         // Vehicle Type is a mandatory field on every row being submitted.
         const missingVehicleTypeRow = validRows.find(r => !r.vehicleType || !r.vehicleType.trim());
         if (missingVehicleTypeRow) {
@@ -477,6 +558,8 @@ export default function AddInvoice() {
             return;
         }
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         setIsSubmitting(true);
         try {
             let token = localStorage.getItem('token') || localStorage.getItem('accessToken') || "";
@@ -488,6 +571,7 @@ export default function AddInvoice() {
                 } catch (e) {}
             }
 
+<<<<<<< HEAD
             // Bug fix (task item 12): "Conversion failed when converting date
             // and/or time from character string." - re-normalize every date
             // field through parseDateForApi/dayjs right before building the
@@ -501,10 +585,13 @@ export default function AddInvoice() {
                 return fallbackToToday ? new Date().toISOString().split('T')[0] : null;
             };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             const formData = new FormData();
             const payloadRows = validRows.map((r) => ({
                 locationId: selectedLocation?.LocationID || selectedLocation?.locationID || null,
                 locationName: r.locationName,
+<<<<<<< HEAD
                 // Plant is selected by the user in Step 1 and never shown again
                 // in the grid — sent hidden here so the server still receives it.
                 plantId: selectedPlant?.PlantHierarchyID || selectedPlant?.plantHierarchyID || null,
@@ -520,6 +607,20 @@ export default function AddInvoice() {
                 lrNo: r.lrNo,
                 vehicleType: r.vehicleType,
                 vehicleTypeId: r.vehicleTypeId || null,
+=======
+                gstNo: r.gstNo,
+                vendorGstId: r.vendorGstId,
+                vendorId: r.vendorId,
+                customerName: r.customerName,
+                invoiceNo: r.invoiceBillNo,
+                invoiceDate: r.invoiceBillDate || new Date().toISOString().split('T')[0],
+                lrDate: r.lrDate,
+                lrNo: r.lrNo,
+                vehicleNo: r.vehicleNo,
+                vehicleType: r.vehicleType,
+                vehicleTypeId: r.vehicleTypeId || null,
+                fromStation: r.from,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                 toStation: r.to,
                 actualWeight: parseFloat(r.actualWeightMT) || 0,
                 freightCharge: parseFloat(r.freightCharge) || 0,
@@ -568,8 +669,12 @@ export default function AddInvoice() {
     };
 
     return (
+<<<<<<< HEAD
         <LocalizationProvider dateAdapter={AdapterDayjs}>
         <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1000, mx: 'auto', backgroundColor: '#f0f2f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+=======
+        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100, mx: 'auto', backgroundColor: '#f0f2f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             {/* Header Title */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: '#1f2937', display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -730,12 +835,18 @@ export default function AddInvoice() {
                                         <TableRow>
                                             <TableCell sx={{ minWidth: 45, backgroundColor: '#e5e7eb !important', textAlign: 'center', fontWeight: 800 }}>#</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>Location</TableCell>
+<<<<<<< HEAD
                                             <TableCell sx={{ minWidth: 200 }}>Vendor Name *</TableCell>
                                             <TableCell sx={{ minWidth: 170 }}>GST NO * (VendorGST Master)</TableCell>
+=======
+                                            <TableCell sx={{ minWidth: 170 }}>GST NO * (VendorGST Master)</TableCell>
+                                            <TableCell sx={{ minWidth: 200 }}>Customer Name *</TableCell>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                             <TableCell sx={{ minWidth: 150 }}>Invoice / Bill No *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>Invoice Date *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>LR Date *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>LR NO *</TableCell>
+<<<<<<< HEAD
                                             <TableCell sx={{ minWidth: 160 }}>Vehicle Type *</TableCell>
                                             <TableCell sx={{ minWidth: 140 }}>To *</TableCell>
                                             <TableCell sx={{ minWidth: 130, textAlign: 'right' }}>Freight Chargeable Wt (MT/KG)</TableCell>
@@ -743,6 +854,16 @@ export default function AddInvoice() {
                                             <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Detain Chg</TableCell>
                                             <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Extra Chg</TableCell>
                                             <TableCell sx={{ minWidth: 200 }}>Customer Name</TableCell>
+=======
+                                            <TableCell sx={{ minWidth: 130 }}>Vehicle No *</TableCell>
+                                            <TableCell sx={{ minWidth: 160 }}>Vehicle Type </TableCell>
+                                            <TableCell sx={{ minWidth: 140 }}>From *</TableCell>
+                                            <TableCell sx={{ minWidth: 140 }}>To *</TableCell>
+                                            <TableCell sx={{ minWidth: 130, textAlign: 'right' }}>Actual Wt (MT/KG)*</TableCell>
+                                            <TableCell sx={{ minWidth: 120, textAlign: 'right' }}>Freight Chg</TableCell>
+                                            <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Detain Chg</TableCell>
+                                            <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Extra Chg</TableCell>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                             <TableCell sx={{ minWidth: 120, textAlign: 'right', backgroundColor: '#e6f4ea !important', color: '#137333 !important' }}>Total</TableCell>
                                             <TableCell sx={{ minWidth: 180 }}>Remarks</TableCell>
                                             <TableCell sx={{ minWidth: 90, textAlign: 'center' }}>Pre-Appr</TableCell>
@@ -760,6 +881,7 @@ export default function AddInvoice() {
                                                 </TableCell>
                                                 <TableCell sx={{ color: '#4b5563', fontWeight: 600, fontSize: '0.82rem' }}>{row.locationName}</TableCell>
 
+<<<<<<< HEAD
                                                 {/* 1. Vendor Name Autocomplete — selecting a vendor auto-fills GST NO below */}
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'vendorName' })}>
                                                     <Autocomplete
@@ -791,6 +913,25 @@ export default function AddInvoice() {
                                                         options={getVendorGstOptions(row.vendorId)}
                                                         placeholder="Type/Select GST..."
                                                         onChange={(val) => handleGstSelect(row.id, val, row.vendorId)}
+=======
+                                                {/* 1. GST NO Autocomplete */}
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'gstNo' })}>
+                                                    <EditableAutocompleteCell
+                                                        value={row.gstNo}
+                                                        options={masterReferences.vendorGsts.map(v => v.GSTNumber).filter(Boolean)}
+                                                        placeholder="Type/Select GST..."
+                                                        onChange={(val) => handleGstSelect(row.id, val)}
+                                                    />
+                                                </TableCell>
+
+                                                {/* 2. Customer Name Autocomplete */}
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'customerName' })}>
+                                                    <EditableAutocompleteCell
+                                                        value={row.customerName}
+                                                        options={masterReferences.customers}
+                                                        placeholder="Customer Name..."
+                                                        onChange={(val) => handleCellChange(row.id, 'customerName', val)}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                     />
                                                 </TableCell>
 
@@ -798,6 +939,7 @@ export default function AddInvoice() {
                                                     <TextField value={row.invoiceBillNo} onChange={(e) => handleCellChange(row.id, 'invoiceBillNo', e.target.value)} placeholder="INV-001" size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } }} />
                                                 </TableCell>
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'invoiceBillDate' })}>
+<<<<<<< HEAD
                                                     <DatePicker
                                                         value={toDayjsValue(row.invoiceBillDate)}
                                                         onChange={(newValue) => handleCellChange(row.id, 'invoiceBillDate', parseDateForApi(newValue))}
@@ -812,10 +954,22 @@ export default function AddInvoice() {
                                                         format={DISPLAY_DATE_FORMAT}
                                                         slotProps={{ textField: { size: 'small', fullWidth: true, variant: 'standard', slotProps: { input: { disableUnderline: true }, inputLabel: { shrink: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } } } }}
                                                     />
+=======
+                                                    <TextField type="date" value={row.invoiceBillDate} onChange={(e) => handleCellChange(row.id, 'invoiceBillDate', e.target.value)} size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, inputLabel: { shrink: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } }} />
+                                                </TableCell>
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'lrDate' })}>
+                                                    <TextField type="date" value={row.lrDate} onChange={(e) => handleCellChange(row.id, 'lrDate', e.target.value)} size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, inputLabel: { shrink: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } }} />
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                 </TableCell>
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'lrNo' })}>
                                                     <TextField value={row.lrNo} onChange={(e) => handleCellChange(row.id, 'lrNo', e.target.value)} placeholder="LR No" size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } }} />
                                                 </TableCell>
+<<<<<<< HEAD
+=======
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'vehicleNo' })}>
+                                                    <TextField value={row.vehicleNo} onChange={(e) => handleCellChange(row.id, 'vehicleNo', e.target.value)} placeholder="GJ01AB1234" size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem' } } }} />
+                                                </TableCell>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'vehicleType' })}>
                                                     <Select 
                                                         value={row.vehicleType} 
@@ -827,8 +981,13 @@ export default function AddInvoice() {
                                                         disableUnderline 
                                                         sx={{ fontSize: '0.82rem', '& .MuiSelect-select': { py: 0.5, px: 1 } }}
                                                     >
+<<<<<<< HEAD
                                                         <MenuItem value="" disabled>-- Select Vehicle Type --</MenuItem>
                                                         {masterReferences.vehicleTypes.map((t, idx) => (
+=======
+                                                        <MenuItem value="">-- None / Optional --</MenuItem>
+                                                        {VEHICLE_TYPES.map((t, idx) => (
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                             <MenuItem key={idx} value={t} sx={{ fontSize: '0.82rem' }}>
                                                                 {t}
                                                             </MenuItem>
@@ -836,16 +995,33 @@ export default function AddInvoice() {
                                                     </Select>
                                                 </TableCell>
 
+<<<<<<< HEAD
                                                 {/* 4. TO (Destination) Autocomplete — sourced from DestinationMaster
                                                     city list (task item 13: no longer restricted by a Contract No
                                                     selection, since that field was removed from this form). */}
+=======
+                                                {/* 3. FROM (Origin) Autocomplete */}
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'from' })}>
+                                                    <EditableAutocompleteCell
+                                                        value={row.from}
+                                                        options={masterReferences.fromStations}
+                                                        placeholder="Origin"
+                                                        onChange={(val) => handleCellChange(row.id, 'from', val)}
+                                                    />
+                                                </TableCell>
+
+                                                {/* 4. TO (Destination) Autocomplete */}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'to' })}>
                                                     <EditableAutocompleteCell
                                                         value={row.to}
                                                         options={masterReferences.toStations}
                                                         placeholder="Destination"
                                                         onChange={(val) => handleCellChange(row.id, 'to', val)}
+<<<<<<< HEAD
                                                         freeSolo={false}
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                     />
                                                 </TableCell>
 
@@ -862,6 +1038,7 @@ export default function AddInvoice() {
                                                     <TextField type="number" value={row.extraCharge} onChange={(e) => handleCellChange(row.id, 'extraCharge', e.target.value)} placeholder="0" size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem', textAlign: 'right' } } }} />
                                                 </TableCell>
 
+<<<<<<< HEAD
                                                 {/* Customer Name Autocomplete — sourced from Customer Master;
                                                     typing a new name inline-creates it there too (task item 6).
                                                     Only mandatory when this row carries a Detain or Extra charge. */}
@@ -882,6 +1059,8 @@ export default function AddInvoice() {
                                                     )}
                                                 </TableCell>
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                                                 <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: '#137333', backgroundColor: '#f4fbf7 !important' }}>
                                                     ₹ {row.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                 </TableCell>
@@ -923,6 +1102,11 @@ export default function AddInvoice() {
                 <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
             </Snackbar>
         </Box>
+<<<<<<< HEAD
         </LocalizationProvider>
     );
 }
+=======
+    );
+}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

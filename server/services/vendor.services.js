@@ -22,6 +22,7 @@ const getStateFromGST = (gstNumber) => {
   return stateMapping[stateCode] || "Other State";
 };
 
+<<<<<<< HEAD
 /**
  * Create a new vendor along with their associated GST details using a transaction
  */
@@ -104,6 +105,10 @@ const createVendor = async (vendorData, transaction = null) => {
     }
     throw error;
   }
+=======
+const createVendor = async (vendorData, transaction = null) => {
+  return Vendor.create(vendorData, { transaction });
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };
 
 const createVendorGST = async (gstList, transaction = null) => {
@@ -229,20 +234,35 @@ const updateVendor = async (vendorId, vendorData, transaction = null) => {
       }
     );
 
+<<<<<<< HEAD
     // 2. Update GST numbers in place
     const incomingGst = vendorData.gstNumbers || vendorData.gstDetails;
 
     if (incomingGst && Array.isArray(incomingGst)) {
       const existingGstRows = await VendorGST.findAll({
+=======
+    // 2. GST Numbers Handle Karo (Old badha delete karo ane navi list insert karo)
+    const incomingGst = vendorData.gstNumbers || vendorData.gstDetails;
+
+    if (incomingGst && Array.isArray(incomingGst)) {
+      // Pehla aa vendor na juna badha GST records destroy kari do
+      await VendorGST.destroy({
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         where: { VendorID: vendorId },
         transaction: t,
       });
 
+<<<<<<< HEAD
       const cleanIncoming = incomingGst
+=======
+      // Pachi navi valid entries filter kari ne create karo
+      const gstRecordsToCreate = incomingGst
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         .filter((item) => {
           const gstVal = typeof item === "string" ? item : item.GSTNumber;
           return gstVal && typeof gstVal === "string" && gstVal.trim() !== "";
         })
+<<<<<<< HEAD
         .map((item, index) => ({
           VendorGSTID: typeof item === "object" ? item.VendorGSTID || null : null,
           GSTNumber: (typeof item === "string" ? item : item.GSTNumber).trim(),
@@ -294,6 +314,22 @@ const updateVendor = async (vendorId, vendorData, transaction = null) => {
 
       if (rowsToCreate.length > 0) {
         await VendorGST.bulkCreate(rowsToCreate, { transaction: t });
+=======
+        .map((item, index) => {
+          const cleanGST = typeof item === "string" ? item.trim() : item.GSTNumber.trim();
+          const derivedState = getStateFromGST(cleanGST);
+
+          return {
+            VendorID: vendorId,
+            GSTNumber: cleanGST,
+            StateName: typeof item === "object" && item.StateName ? item.StateName : derivedState,
+            IsDefault: typeof item === "object" && item.IsDefault !== undefined ? Boolean(item.IsDefault) : index === 0,
+          };
+        });
+
+      if (gstRecordsToCreate.length > 0) {
+        await VendorGST.bulkCreate(gstRecordsToCreate, { transaction: t });
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       }
     }
 
@@ -301,6 +337,10 @@ const updateVendor = async (vendorId, vendorData, transaction = null) => {
       await t.commit();
     }
 
+<<<<<<< HEAD
+=======
+    // Updated vendor data with related GST records return karo
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     return await getVendorById(vendorId);
   } catch (error) {
     if (!isExternalTransaction) {
@@ -336,6 +376,7 @@ const bulkUploadVendors = async (rawData) => {
     for (let index = 0; index < rawData.length; index++) {
       const row = rawData[index];
       try {
+<<<<<<< HEAD
         if (!row.VendorName) {
           throw new Error(`Row ${index + 1}: VendorName is required.`);
         }
@@ -349,6 +390,19 @@ const bulkUploadVendors = async (rawData) => {
 
         const newVendor = await Vendor.create({
           VendorCode: vendorCode,
+=======
+        if (!row.VendorCode || !row.VendorName) {
+          throw new Error(`Row ${index + 1}: VendorCode and VendorName are required.`);
+        }
+
+        const existingVendor = await Vendor.findOne({ where: { VendorCode: row.VendorCode }, transaction });
+        if (existingVendor) {
+          throw new Error(`Row ${index + 1}: VendorCode '${row.VendorCode}' already exists.`);
+        }
+
+        const newVendor = await Vendor.create({
+          VendorCode: row.VendorCode,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
           VendorName: row.VendorName,
           Address: row.Address || null,
           ContactPerson: row.ContactPerson || null,
@@ -370,7 +424,11 @@ const bulkUploadVendors = async (rawData) => {
               VendorID: newVendor.VendorID,
               GSTNumber: cleanGST,
               StateName: derivedState,
+<<<<<<< HEAD
               IsDefault: gstIndex === 0 ? true : false,
+=======
+              IsDefault: gstIndex === 0 ? true : false, // First GST number is default true
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             }, { transaction });
 
             gstIndex++;
@@ -384,15 +442,23 @@ const bulkUploadVendors = async (rawData) => {
     }
 
     if (errors.length > 0 && successCount === 0) {
+<<<<<<< HEAD
+=======
+      await transaction.rollback();
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       throw new Error(`Bulk upload failed: ${errors.map(e => e.message).join(" | ")}`);
     }
 
     await transaction.commit();
     return { successCount, errors };
   } catch (error) {
+<<<<<<< HEAD
     if (!transaction.finished) {
       await transaction.rollback();
     }
+=======
+    await transaction.rollback();
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     throw error;
   }
 };

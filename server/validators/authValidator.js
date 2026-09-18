@@ -11,6 +11,7 @@ const loginSchema = Joi.object({
   }),
 });
 
+<<<<<<< HEAD
 const forgotPasswordSchema = Joi.object({
   Email: Joi.string().email().required().messages({
     "string.email": "Invalid Email Address.",
@@ -29,6 +30,8 @@ const resetPasswordSchema = Joi.object({
   }),
 });
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const validateLogin = (req, res, next) => {
   const { error } = loginSchema.validate(req.body, {
     abortEarly: false,
@@ -46,6 +49,7 @@ const validateLogin = (req, res, next) => {
   next();
 };
 
+<<<<<<< HEAD
 const validateForgotPassword = (req, res, next) => {
   const { error } = forgotPasswordSchema.validate(req.body, {
     abortEarly: false,
@@ -84,4 +88,8 @@ module.exports = {
   validateLogin,
   validateForgotPassword,
   validateResetPassword,
+=======
+module.exports = {
+  validateLogin,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };

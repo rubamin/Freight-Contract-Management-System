@@ -25,6 +25,7 @@ const ContractRateMatrix = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+<<<<<<< HEAD
     // Distance in KM for this destination, parsed from the "KM" column in
     // the DOMESTIC DESTINATIONS sheet of the Rate Matrix Excel template.
     // Nullable because rows from the ADDITIONAL DESTINATIONS sheet (by
@@ -35,6 +36,8 @@ const ContractRateMatrix = sequelize.define(
       type: DataTypes.DECIMAL(18, 2),
       allowNull: true,
     },
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     BaseRate: {
       type: DataTypes.DECIMAL(18, 2),
       allowNull: false,

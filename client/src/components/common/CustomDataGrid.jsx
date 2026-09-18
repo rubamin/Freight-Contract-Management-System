@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useMemo } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 
@@ -18,6 +19,11 @@ const buildSrNoColumn = ({ rows, page, pageSize }) => ({
   },
 });
 
+=======
+import React from "react";
+import { DataGrid } from "@mui/x-data-grid";
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const CustomDataGrid = ({
   rows,
   columns,
@@ -31,6 +37,7 @@ const CustomDataGrid = ({
   onSortModelChange,
   sx = {},
 }) => {
+<<<<<<< HEAD
   const orderedColumns = useMemo(() => {
     const dataColumns = columns.filter((col) => col.field !== "Action");
     const actionColumn = columns.find((col) => col.field === "Action");
@@ -46,6 +53,12 @@ const CustomDataGrid = ({
     <DataGrid
       rows={rows}
       columns={orderedColumns}
+=======
+  return (
+    <DataGrid
+      rows={rows}
+      columns={columns}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       getRowId={getRowId}
       autoHeight
       loading={loading}
@@ -83,7 +96,11 @@ const CustomDataGrid = ({
           borderTop: "1px solid #E5E7EB",
         },
         "& .MuiDataGrid-virtualScroller": {
+<<<<<<< HEAD
           overflowX: "auto",
+=======
+          overflowX: "hidden",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         },
         ...sx,
       }}

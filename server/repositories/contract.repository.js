@@ -6,8 +6,12 @@ const {
   ContractRateMatrix,
   DestinationMaster,
   VehicleType,
+<<<<<<< HEAD
   WeightMaster,
   sequelize
+=======
+  WeightMaster
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 } = require("../models");
 
 // Updated contractInclude with nested rateMatrix associations
@@ -78,11 +82,16 @@ const getContractById = async (contractId, transaction = null) => {
   });
 };
 
+<<<<<<< HEAD
 // Bug fix (task item 4): ContractNo only needs to be unique per vendor, not
 // globally, so this now always scopes the lookup by VendorID too - matching
 // the composite unique index on ContractMaster (VendorID, ContractNo).
 const getContractByNumber = async (contractNo, vendorId, excludeContractId = null) => {
   const where = { ContractNo: contractNo, VendorID: vendorId };
+=======
+const getContractByNumber = async (contractNo, excludeContractId = null) => {
+  const where = { ContractNo: contractNo };
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   if (excludeContractId) {
     where.ContractID = { [Op.ne]: excludeContractId };
@@ -155,6 +164,7 @@ const getVendorById = async (vendorId) => {
 
 // 3. Automated Check-or-Create Methods for Excel Import Processing Flow
 const findOrCreateVehicleType = async ({ VehicleName, Capacity, Unit }, transaction = null) => {
+<<<<<<< HEAD
   const execute = async (t) => {
     const existing = await VehicleType.findOne({ where: { VehicleName }, transaction: t });
     if (existing) return existing;
@@ -219,6 +229,32 @@ const findOrCreateWeight = async ({ Weight, WeightUnit }, transaction = null) =>
   }
 
   return await sequelize.transaction(execute);
+=======
+  const [vehicleType] = await VehicleType.findOrCreate({
+    where: { VehicleName },
+    defaults: { Capacity, Unit },
+    transaction
+  });
+  return vehicleType;
+};
+
+const findOrCreateDestination = async ({ City, District, State, Pincode }, transaction = null) => {
+  const [destination] = await DestinationMaster.findOrCreate({
+    where: { City, State: State || "Gujarat" },
+    defaults: { District: District || "", Pincode: Pincode || "" },
+    transaction
+  });
+  return destination;
+};
+
+const findOrCreateWeight = async ({ FromWeight, ToWeight, WeightUnit }, transaction = null) => {
+  const [weight] = await WeightMaster.findOrCreate({
+    where: { FromWeight, WeightUnit: WeightUnit || "MT" },
+    defaults: { ToWeight: ToWeight || FromWeight },
+    transaction
+  });
+  return weight;
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };
 
 // 4. Rate Matrix Insertion and Cleanup Methods
@@ -275,4 +311,8 @@ module.exports = {
 
   getRateMatrixByContractId,
   updateRateMatrixEntry,
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

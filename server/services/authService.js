@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 const { User, Role, sequelize } = require("../models");
 const { comparePassword, hashPassword } = require("../helpers/bcrpt");
 const { generateToken } = require("../helpers/jwt");
@@ -9,6 +10,28 @@ const {
 } = require("../constants/messages");
 
 const login = async ({ Email, Password }) => {
+=======
+const { User, Role } = require("../models");
+const { comparePassword } = require("../helpers/bcrpt");
+const { generateToken } = require("../helpers/jwt");
+
+const sanitizeUser = (user) => ({
+  UserID: user.UserID,
+  RoleID: user.RoleID,
+  FullName: user.FullName,
+  Email: user.Email,
+  MobileNo: user.MobileNo,
+  IsActive: user.IsActive,
+  LastLogin: user.LastLogin,
+  role: user.role,
+});
+
+const login = async ({ Email, Password }) => {
+  console.log("========== LOGIN ==========");
+  console.log("Email :", Email);
+  console.log("Password :", Password);
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const user = await User.findOne({
     where: {
       Email,
@@ -22,7 +45,19 @@ const login = async ({ Email, Password }) => {
     ],
   });
 
+<<<<<<< HEAD
   if (!user || !user.PasswordHash) {
+=======
+  console.log("User Found :", !!user);
+
+  if (user) {
+    console.log("DB Email :", user.Email);
+    console.log("DB Hash :", user.PasswordHash);
+  }
+
+  if (!user || !user.PasswordHash) {
+    console.log("❌ User not found or PasswordHash missing");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     throw new Error("Invalid email or password.");
   }
 
@@ -31,6 +66,7 @@ const login = async ({ Email, Password }) => {
     user.PasswordHash
   );
 
+<<<<<<< HEAD
   if (!isValidPassword) {
     throw new Error("Invalid email or password.");
   }
@@ -40,12 +76,30 @@ const login = async ({ Email, Password }) => {
     LastLogin: sequelize.literal("GETDATE()"),
   });
 
+=======
+  console.log("Password Match :", isValidPassword);
+
+  if (!isValidPassword) {
+    console.log("❌ Password mismatch");
+    throw new Error("Invalid email or password.");
+  }
+
+  // await user.update({
+  //   LastLogin: new Date(),
+  // });
+console.log("Skipping LastLogin update...");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const token = generateToken({
     UserID: user.UserID,
     RoleID: user.RoleID,
     Email: user.Email,
   });
 
+<<<<<<< HEAD
+=======
+  console.log("✅ Login Successful");
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   return {
     token,
     user: sanitizeUser(user),
@@ -69,6 +123,7 @@ const getProfile = async (userId) => {
   return sanitizeUser(user);
 };
 
+<<<<<<< HEAD
 const forgotPassword = async ({ Email }, { buildResetLink }) => {
   const user = await User.findOne({
     where: {
@@ -129,4 +184,9 @@ module.exports = {
   getProfile,
   forgotPassword,
   resetPassword,
+=======
+module.exports = {
+  login,
+  getProfile,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };

@@ -6,16 +6,23 @@ const VendorGST = require("./VendorGST");
 const User = require("./User");
 const Role = require("./Role");
 const RolePermission = require("./RolePermission");
+<<<<<<< HEAD
 const UserPreference = require("./UserPreference");
 const Notification = require("./Notification");
 const Plant = require("./Plant");
 const PlantLocation = require("./PlantLocation");
+=======
+const Plant = require("./Plant");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const VehicleType = require("./VehicleType");
 const WeightMaster = require("./WeightMaster");
 const DestinationMaster = require("./DestinationMaster");
 const StatusMaster = require("./StatusMaster");
+<<<<<<< HEAD
 const CustomerMaster = require("./CustomerMaster");
 const AuditLog = require("./Auditlog");
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 // Importing Cleaned Contract Subsystem Models
 const ContractMaster = require("./ContractMaster");
@@ -26,9 +33,12 @@ const InvoiceHeader = require("./InvoiceHeader");
 const InvoiceItem = require("./InvoiceItem");
 const InvoiceApprovalHistory = require("./InvoiceApprovalHistory");
 const InvoiceVerification = require("./InvoiceVerification"); // <-- Added InvoiceVerification
+<<<<<<< HEAD
 const UserModulePermission = require("./UserModulePermission");
 const UserLocationPermission = require("./UserLocationPermission");
 const AccessRequest = require("./AccessRequest");
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 
 // ==========================================
@@ -68,6 +78,7 @@ Role.hasMany(RolePermission, {
 });
 
 // ==========================================
+<<<<<<< HEAD
 //  USER PREFERENCES ASSOCIATIONS
 // ==========================================
 User.hasOne(UserPreference, {
@@ -86,6 +97,8 @@ UserPreference.belongsTo(Plant, {
 });
 
 // ==========================================
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 //  CLEANED CONTRACT MASTER ASSOCIATIONS
 // ==========================================
 Vendor.hasMany(ContractMaster, {
@@ -204,6 +217,7 @@ InvoiceHeader.belongsTo(Plant, {
   as: "plant",
 });
 
+<<<<<<< HEAD
 // Links Plant to the Company -> SBU -> PlantsHierarchy -> PlantLocations
 // hierarchy managed from Settings, so the plants API can return the real
 // LocationName instead of the two tables having no relationship at all.
@@ -231,6 +245,8 @@ InvoiceHeader.belongsTo(PlantLocation, {
   as: "location",
 });
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 ContractMaster.hasMany(InvoiceHeader, {
   foreignKey: "ContractID",
   as: "invoices",
@@ -285,6 +301,7 @@ InvoiceVerification.belongsTo(InvoiceHeader, {
   as: "invoice",
 });
 
+<<<<<<< HEAD
 // ==========================================
 //  PER-USER MODULE & LOCATION PERMISSIONS
 // ==========================================
@@ -342,20 +359,31 @@ module.exports = {
   CustomerMaster,
   UserModulePermission,
   UserLocationPermission,
+=======
+module.exports = {
+  sequelize,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   Vendor,
   VendorGST,
   User,
   Role,
   RolePermission,
+<<<<<<< HEAD
   UserPreference,
   Notification,
   Plant,
   PlantLocation,
+=======
+  Plant,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   VehicleType,
   WeightMaster,
   DestinationMaster,
   StatusMaster,
+<<<<<<< HEAD
   AuditLog,
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   ContractMaster,
   ContractRateMatrix,
   InvoiceHeader,

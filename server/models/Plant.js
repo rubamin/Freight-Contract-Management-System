@@ -26,6 +26,7 @@ const Plant = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+<<<<<<< HEAD
     // Links a Plant to a Location under the Company -> SBU -> PlantsHierarchy
     // -> PlantLocations hierarchy, so the plants API can surface the real
     // LocationName instead of Plants having no relationship to that
@@ -35,6 +36,8 @@ const Plant = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   },
   {
     tableName: "Plants",

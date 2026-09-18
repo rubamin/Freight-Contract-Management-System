@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { WEIGHT_UNIT_OPTIONS, VEHICLE_TYPE_UNIT_OPTIONS, DEFAULT_WEIGHT_UNIT } from "./units";
 
 export const moduleConfigs = {
@@ -122,6 +123,49 @@ export const moduleConfigs = {
   // statuses is intentionally left out of the sidebar/CRUD UI: StatusMaster
   // is workflow-internal reference data (approval-status labels), not a
   // module an admin edits day to day.
+=======
+export const moduleConfigs = {
+  // plants: {
+  //   title: "Plant Master",
+  //   path: "/masters/plants",
+  //   apiGroup: "masters",
+  //   moduleName: "plants",
+  //   idField: "PlantID",
+  //   columns: ["PlantCode", "PlantName", "City", "State", "IsActive"],
+  // },
+  // vehicleTypes: {
+  //   title: "Vehicle Types",
+  //   path: "/masters/vehicle-types",
+  //   apiGroup: "masters",
+  //   moduleName: "vehicle-types",
+  //   idField: "VehicleTypeID",
+  //   columns: ["VehicleName", "Capacity", "Unit"],
+  // },
+  // weights: {
+  //   title: "Weight Master",
+  //   path: "/masters/weights",
+  //   apiGroup: "masters",
+  //   moduleName: "weights",
+  //   idField: "WeightID",
+  //   columns: ["FromWeight", "ToWeight", "WeightUnit"],
+  // },
+  // destinations: {
+  //   title: "Destination Master",
+  //   path: "/masters/destinations",
+  //   apiGroup: "masters",
+  //   moduleName: "destinations",
+  //   idField: "DestinationID",
+  //   columns: ["City", "District", "State", "Pincode"],
+  // },
+  // statuses: {
+  //   title: "Status Master",
+  //   path: "/masters/statuses",
+  //   apiGroup: "masters",
+  //   moduleName: "statuses",
+  //   idField: "StatusID",
+  //   columns: ["StatusName", "ModuleName"],
+  // },
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   contracts: {
     title: "Contract Master",
     path: "/contracts",
@@ -170,6 +214,48 @@ export const moduleConfigs = {
       "PrimaryUserID",
     ],
   },
+<<<<<<< HEAD
+=======
+  // verifications: {
+  //   title: "Invoice Verification",
+  //   path: "/workflows/verifications",
+  //   apiGroup: "workflows",
+  //   moduleName: "verifications",
+  //   idField: "VerificationID",
+  //   columns: [
+  //     "InvoiceID",
+  //     "ContractID",
+  //     "ExpectedAmount",
+  //     "InvoiceAmount",
+  //     "DifferenceAmount",
+  //     "VerificationStatus",
+  //   ],
+  // },
+  // approvals: {
+  //   title: "Invoice Approvals",
+  //   path: "/workflows/approvals",
+  //   apiGroup: "workflows",
+  //   moduleName: "approvals",
+  //   idField: "ApprovalID",
+  //   columns: ["InvoiceID", "ApprovedBy", "StatusID", "ApprovedDate", "Remarks"],
+  // },
+  // audits: {
+  //   title: "Audit Logs",
+  //   path: "/workflows/audits",
+  //   apiGroup: "workflows",
+  //   moduleName: "audits",
+  //   idField: "AuditID",
+  //   columns: ["UserID", "TableName", "RecordID", "ActionType", "ActionDate"],
+  // },
+  // emails: {
+  //   title: "Email Logs",
+  //   path: "/workflows/emails",
+  //   apiGroup: "workflows",
+  //   moduleName: "emails",
+  //   idField: "EmailLogID",
+  //   columns: ["RecipientEmail", "Subject", "Status", "SentAt"],
+  // },
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };
 
 export const moduleNavigation = [

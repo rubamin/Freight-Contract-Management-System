@@ -96,9 +96,14 @@ const ViewContract = () => {
                 sheet1RawData
                   .map((row) => {
                     const w = row.weight || row.Weight;
+<<<<<<< HEAD
                     if (w && (w.Weight !== undefined || w.weight !== undefined)) {
                       const value = w.Weight !== undefined ? w.Weight : w.weight;
                       return `${value} ${w.WeightUnit || "MT"}`.trim();
+=======
+                    if (w && (w.FromWeight !== undefined || w.fromWeight !== undefined)) {
+                      return `${w.FromWeight !== undefined ? w.FromWeight : w.fromWeight} MT`.trim();
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                     }
                     return row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate";
                   })
@@ -112,6 +117,7 @@ const ViewContract = () => {
               const cityName = destObj?.City || destObj?.city || `Destination ${row.DestinationID || row.destinationID || "N/A"}`;
               
               const w = row.weight || row.Weight;
+<<<<<<< HEAD
               const weightLabel = (w && (w.Weight !== undefined || w.weight !== undefined)) 
                 ? `${w.Weight !== undefined ? w.Weight : w.weight} ${w.WeightUnit || "MT"}`.trim() 
                 : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
@@ -123,6 +129,14 @@ const ViewContract = () => {
                   distanceKm: distanceKm !== undefined && distanceKm !== null ? distanceKm : "",
                   rates: {}
                 };
+=======
+              const weightLabel = (w && (w.FromWeight !== undefined || w.fromWeight !== undefined)) 
+                ? `${w.FromWeight !== undefined ? w.FromWeight : w.fromWeight} MT`.trim() 
+                : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
+
+              if (!cityMap[cityName]) {
+                cityMap[cityName] = { cityName, rates: {} };
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
               }
               cityMap[cityName].rates[weightLabel] = {
                 RateID: row.RateID !== undefined ? row.RateID : row.rateID,
@@ -311,7 +325,11 @@ const ViewContract = () => {
                 }}
               >
                 <TableContainer component={Paper} sx={{ border: "1px solid #e0e0e0", maxHeight: 500, boxShadow: "none" }}>
+<<<<<<< HEAD
                   <Table stickyHeader size="small" sx={{ minWidth: Math.max(700, sheet1Weights.length * 100 + 240) }}>
+=======
+                  <Table stickyHeader size="small" sx={{ minWidth: Math.max(700, sheet1Weights.length * 100 + 160) }}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                     <TableHead>
                       <TableRow>
                         <TableCell 
@@ -328,9 +346,12 @@ const ViewContract = () => {
                         >
                           DESTINATION
                         </TableCell>
+<<<<<<< HEAD
                         <TableCell align="center" sx={{ fontWeight: "bold", bgcolor: "#e2e8f0", minWidth: 80 }}>
                           KM
                         </TableCell>
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                         {sheet1Weights.map((weight) => (
                           <TableCell key={weight} align="center" sx={{ fontWeight: "bold", bgcolor: "#e2e8f0", minWidth: 100 }}>
                             {weight}
@@ -358,9 +379,12 @@ const ViewContract = () => {
                             >
                               {dest.cityName}
                             </TableCell>
+<<<<<<< HEAD
                             <TableCell align="center" sx={{ minWidth: 80 }}>
                               <Typography variant="body2">{dest.distanceKm !== undefined && dest.distanceKm !== "" ? dest.distanceKm : "-"}</Typography>
                             </TableCell>
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                             {sheet1Weights.map((weight) => {
                               const cellData = dest.rates[weight] || {};
                               return (
@@ -373,7 +397,11 @@ const ViewContract = () => {
                         ))}
                       {filteredSheet1.length === 0 && (
                         <TableRow>
+<<<<<<< HEAD
                           <TableCell colSpan={sheet1Weights.length + 2} align="center">
+=======
+                          <TableCell colSpan={sheet1Weights.length + 1} align="center">
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                             No matching destination records found.
                           </TableCell>
                         </TableRow>

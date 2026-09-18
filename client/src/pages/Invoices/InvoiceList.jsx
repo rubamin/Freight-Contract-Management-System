@@ -8,6 +8,7 @@ import {
   Chip,
   Modal,
   IconButton,
+<<<<<<< HEAD
   InputAdornment,
   Link,
   Checkbox,
@@ -20,6 +21,12 @@ import {
   TablePagination
 } from "@mui/material";
 import Grid from "@mui/material/Grid";
+=======
+  Grid,
+  InputAdornment,
+  Link
+} from "@mui/material";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import { 
   Close, 
   CheckCircle, 
@@ -28,20 +35,31 @@ import {
   Refresh,
   Clear,
   Add,
+<<<<<<< HEAD
   Description,
   Email,
   Edit,
   PendingActions
 } from "@mui/icons-material";
+=======
+  OpenInNew,
+  Description
+} from "@mui/icons-material";
+import { DataGrid } from "@mui/x-data-grid";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
+<<<<<<< HEAD
 import { formatDateDisplay } from "../../utils/dateFormat";
 import usePermissions from "../../hooks/usePermissions";
 
 // Modal styling for audit remarks/logs popup
+=======
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const remarksModalStyle = {
   position: "absolute",
   top: "50%",
@@ -57,6 +75,7 @@ const remarksModalStyle = {
 
 const InvoiceList = () => {
   const navigate = useNavigate();
+<<<<<<< HEAD
   const { canEdit, loaded: permissionsLoaded } = usePermissions();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,20 +87,31 @@ const InvoiceList = () => {
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
   // Snackbar notification state
+=======
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const [snackbar, setSnackbar] = useState({
     open: false,
     severity: "success",
     message: "",
   });
 
+<<<<<<< HEAD
   // Remarks modal state
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const [remarksModal, setRemarksModal] = useState({
     open: false,
     text: "",
     invoiceNo: ""
   });
 
+<<<<<<< HEAD
   // Helper function to retrieve authorization headers
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const getAuthHeader = () => {
     const authDataStr = localStorage.getItem("freight_contract_auth");
     let token = localStorage.getItem("token") || "";
@@ -95,7 +125,10 @@ const InvoiceList = () => {
     return { Authorization: `Bearer ${token}` };
   };
 
+<<<<<<< HEAD
   // Fetch invoices from backend API
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const fetchInvoices = async () => {
     try {
       setLoading(true);
@@ -122,11 +155,15 @@ const InvoiceList = () => {
     fetchInvoices();
   }, [search]);
 
+<<<<<<< HEAD
   // Clear search filter handler
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const handleClearFilters = () => {
     setSearch("");
   };
 
+<<<<<<< HEAD
   // Navigate to the Edit Invoice page carrying the selected invoice IDs so
   // one or many invoices can be edited together in one grid, just like the
   // Add Invoice flow.
@@ -188,6 +225,8 @@ const InvoiceList = () => {
   };
 
   // Map and sanitize raw invoice records into table display rows
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const rows = useMemo(() => {
     if (!Array.isArray(invoices)) return [];
     const sortedInvoices = [...invoices].sort((a, b) => (b.InvoiceID || 0) - (a.InvoiceID || 0));
@@ -207,13 +246,18 @@ const InvoiceList = () => {
       
       let systemAuditStatus = "APPROVED";
       const rawStatus = invoice.verification?.VerificationStatus || invoice['verification.VerificationStatus'] || invoice.VerificationStatus;
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       if (rawStatus) {
         systemAuditStatus = String(rawStatus).toUpperCase();
       } else if (Math.abs(variance) > 15) {
         systemAuditStatus = "DISCREPANCY";
       }
 
+<<<<<<< HEAD
       // IsPreApproved is now a real, persisted column (previously this flag
       // was silently discarded and always showed "No"). Pre-Approved always
       // takes priority in the displayed status over whatever the automated
@@ -249,10 +293,13 @@ const InvoiceList = () => {
       const formattedInvoiceDate = formatDateDisplay(invoice.InvoiceDate || invoice.invoiceDate);
       const formattedLrDate = formatDateDisplay(invoice.LRDate || invoice.lrDate);
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       return {
         id: invoice.InvoiceID || index,
         srNo: index + 1,
         InvoiceID: invoice.InvoiceID,
+<<<<<<< HEAD
         PlantID: invoice.PlantID ?? invoice.plantId ?? null,
         // Real hierarchy Location (N1, N2, etc.) - this is what the
         // "Send Selected Mail" flow groups by so each location's own
@@ -282,6 +329,32 @@ const InvoiceList = () => {
         AuditStatus: displayStatus,
         PreAppr: isPreApproved ? "Yes" : "No",
         Remarks: invoice.Remarks || invoice.remarks || "-",
+=======
+        LocationName: invoice.locationName || invoice.LocationName || invoice.location?.LocationName || invoice['location.LocationName'] || "-",
+        UploadedDateStr: invoice.UploadedDate ? new Date(invoice.UploadedDate).toISOString().slice(0, 10) : "-",
+        GSTNumber: invoice.gstNo || invoice.vendorGST?.GSTNumber || invoice['vendorGST.GSTNumber'] || "-",
+        CustomerName: invoice.customerName || invoice.CustomerName || invoice.customer?.CustomerName || invoice['customer.CustomerName'] || "-",
+        InvoiceNumber: invoice.invoiceNo || invoice.InvoiceNumber || "-",
+        InvoiceDate: invoice.invoiceDate || invoice.InvoiceDate || null, 
+        LRDate: invoice.lrDate || invoice.LRDate || "-",
+        LRNumber: invoice.lrNo || invoice.LRNumber || "-",
+        VehicleNumber: invoice.vehicleNo || invoice.VehicleNumber || "-",
+        VehicleType: invoice.vehicleType || invoice.VehicleType || "-",
+        FromStation: invoice.fromStation || invoice.FromStation || "-",
+        ToStation: invoice.toStation || invoice.ToStation || "-",
+        ActualWeight: invoice.actualWeight !== undefined ? invoice.actualWeight : (invoice.TotalWeight || 0),
+        BasicFreight: invoice.freightCharge !== undefined ? invoice.freightCharge : (invoice.BasicFreight || 0),
+        DetainCharges: invoice.detainCharge !== undefined ? invoice.detainCharge : (invoice.DetainCharges || 0), 
+        ExtraCharges: invoice.extraCharge !== undefined ? invoice.extraCharge : (invoice.ExtraCharges || 0),   
+        TotalInvoiceAmount: billed,
+        ExpectedAmount: expected,
+        VarianceAmount: variance,
+        AuditStatus: systemAuditStatus,
+        PreAppr: invoice.preAppr || invoice.PreAppr || "No",
+        Remarks: invoice.remarks || invoice.Remarks || "-",
+        ContractID: invoice.ContractID || null,
+        ContractNo: invoice.contract?.ContractNo || invoice['contract.ContractNo'] || invoice.ContractNo || (invoice.ContractID ? `CTR-${invoice.ContractID}` : "-"),
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         Doc1Path: invoice.Doc1Path || invoice.doc1Path || null,
         Doc2Path: invoice.Doc2Path || invoice.doc2Path || null,
         Doc3Path: invoice.Doc3Path || invoice.doc3Path || null,
@@ -289,9 +362,14 @@ const InvoiceList = () => {
     });
   }, [invoices]);
 
+<<<<<<< HEAD
   // Render downloadable document link inside table cell
   const renderDocCell = (docPath) => {
     if (!docPath) return "-";
+=======
+  const renderDocCell = (docPath) => {
+    if (!docPath) return <Typography variant="body2" color="text.secondary">-</Typography>;
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     const fileName = docPath.split("\\").pop().split("/").pop();
     const fileUrl = `http://localhost:5000/${docPath.replace(/\\/g, "/")}`;
 
@@ -317,6 +395,7 @@ const InvoiceList = () => {
     );
   };
 
+<<<<<<< HEAD
   // Handle master checkbox select/deselect all
   const handleSelectAllClick = (event) => {
     if (event.target.checked) {
@@ -351,10 +430,175 @@ const InvoiceList = () => {
 
   return (
     <Box p={3} sx={{ width: "100%" }}>
+=======
+  const columns = [
+    { field: "srNo", headerName: "#", width: 60, sortable: false },
+    { field: "LocationName", headerName: "Location", width: 130 },
+    { field: "UploadedDateStr", headerName: "Upload Date", width: 120 },
+    { field: "InvoiceNumber", headerName: "Invoice No", width: 130 },
+    { 
+      field: "InvoiceDate", 
+      headerName: "Invoice Date", 
+      width: 120,
+      renderCell: (params) => {
+        const rawDate = params.row?.InvoiceDate;
+        if (!rawDate) return "-";
+        try {
+          return String(rawDate).slice(0, 10);
+        } catch { return "-"; }
+      }
+    },
+    { field: "CustomerName", headerName: "Customer Name", width: 160 },
+    { field: "GSTNumber", headerName: "GST Number", width: 160 },
+    { 
+      field: "LRDate", 
+      headerName: "LR Date", 
+      width: 120, 
+      renderCell: (params) => params.row?.LRDate ? String(params.row.LRDate).slice(0, 10) : "-" 
+    },
+    { field: "LRNumber", headerName: "LR No", width: 120 },
+    { field: "VehicleNumber", headerName: "Vehicle No", width: 130 },
+    { field: "VehicleType", headerName: "Vehicle Type", width: 150 },
+    { field: "FromStation", headerName: "From", width: 130 }, 
+    { field: "ToStation", headerName: "To", width: 130 },    
+    { 
+      field: "ActualWeight", 
+      headerName: "Weight (MT)", 
+      width: 110,
+      type: "number",
+      renderCell: (params) => `${params.row?.ActualWeight || 0} MT`
+    },
+    { 
+      field: "BasicFreight", 
+      headerName: "Freight Chg", 
+      width: 120,
+      type: "number",
+      renderCell: (params) => `₹${parseFloat(params.row?.BasicFreight || 0).toFixed(2)}`
+    },
+    { 
+      field: "DetainCharges", 
+      headerName: "Detain Chg", 
+      width: 110,
+      type: "number",
+      renderCell: (params) => `₹${parseFloat(params.row?.DetainCharges || 0).toFixed(2)}`
+    },
+    { 
+      field: "ExtraCharges", 
+      headerName: "Extra Chg", 
+      width: 110,
+      type: "number",
+      renderCell: (params) => `₹${parseFloat(params.row?.ExtraCharges || 0).toFixed(2)}`
+    },
+    { 
+      field: "TotalInvoiceAmount", 
+      headerName: "Total Amount", 
+      width: 130,
+      type: "number",
+      renderCell: (params) => `₹${parseFloat(params.row?.TotalInvoiceAmount || 0).toFixed(2)}`
+    },
+    { field: "PreAppr", headerName: "Pre-Appr", width: 90 },
+    {
+      field: "AuditStatus",
+      headerName: "Contract Match?",
+      width: 140,
+      renderCell: (params) => {
+        const isApproved = params.row?.AuditStatus === "APPROVED";
+        return (
+          <Chip
+            icon={isApproved ? <CheckCircle fontSize="small" /> : <Error fontSize="small" />}
+            label={isApproved ? "Yes" : "No"}
+            color={isApproved ? "success" : "error"}
+            variant="outlined"
+            size="small"
+          />
+        );
+      }
+    },
+    {
+      field: "ExpectedAmount",
+      headerName: "Actual Contract Price",
+      width: 160,
+      type: "number",
+      renderCell: (params) => `₹${parseFloat(params.row?.ExpectedAmount || 0).toFixed(2)}`
+    },
+    {
+      field: "VarianceAmount",
+      headerName: "Extra Charged",
+      width: 140,
+      type: "number",
+      renderCell: (params) => {
+        const extra = parseFloat(params.row?.VarianceAmount || 0);
+        if (extra <= 15) return <Typography variant="body2" color="success.main">₹0.00</Typography>;
+        return (
+          <Typography variant="body2" color="error.main" fontWeight={600}>
+            ₹{extra.toFixed(2)}
+          </Typography>
+        );
+      }
+    },
+    // Doc 1, Doc 2, Doc 3 Columns
+    {
+      field: "Doc1Path",
+      headerName: "Doc 1",
+      width: 180,
+      sortable: false,
+      renderCell: (params) => renderDocCell(params.row?.Doc1Path)
+    },
+    {
+      field: "Doc2Path",
+      headerName: "Doc 2",
+      width: 180,
+      sortable: false,
+      renderCell: (params) => renderDocCell(params.row?.Doc2Path)
+    },
+    {
+      field: "Doc3Path",
+      headerName: "Doc 3",
+      width: 180,
+      sortable: false,
+      renderCell: (params) => renderDocCell(params.row?.Doc3Path)
+    },
+    { 
+      field: "Remarks", 
+      headerName: "Remarks", 
+      width: 250, 
+      sortable: false,
+      renderCell: (params) => {
+        const val = params.value || "-";
+        return (
+          <Typography
+            variant="body2"
+            sx={{
+              color: "#0288d1",
+              cursor: "pointer",
+              textDecoration: "underline",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontWeight: 500,
+              "&:hover": { color: "#01579b" }
+            }}
+            onClick={() => setRemarksModal({
+              open: true,
+              text: val,
+              invoiceNo: params.row?.InvoiceNumber || "N/A"
+            })}
+          >
+            {val}
+          </Typography>
+        );
+      }
+    }
+  ];
+
+  return (
+    <Box p={3} sx={{ maxWidth: "900px", margin: "0 auto", width: "100%", overflow: "hidden" }}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       <Box sx={{ p: 3, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
         <PageHeader
           title="Invoices Management & Auditing"
           breadcrumbs={[
+<<<<<<< HEAD
             { label: "Dashboard", path: "/dashboard" },
             { label: "Invoices Summary" },
           ]}
@@ -394,11 +638,30 @@ const InvoiceList = () => {
             Add Invoice
           </Button>
         </Box>
+=======
+            { label: "Dashboard", path: "/vendors" },
+            { label: "Invoices Summary" },
+          ]}
+        />
+        <Button 
+          variant="contained" 
+          color="primary" 
+          startIcon={<Add />} 
+          onClick={() => navigate("/Invoices/add")}
+          sx={{ textTransform: "none", fontWeight: 600 }}
+        >
+          Add Invoice
+        </Button>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} sx={{ alignItems: "center" }}>
+<<<<<<< HEAD
           <Grid size={{ xs: 12, md: 6 }}>
+=======
+          <Grid item xs={12} md={6}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             <TextField
               fullWidth
               size="small"
@@ -416,7 +679,11 @@ const InvoiceList = () => {
               }}
             />
           </Grid>
+<<<<<<< HEAD
           <Grid size={{ xs: 12, md: 6 }}>
+=======
+          <Grid item xs={12} md={6}>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
             <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
               <Button variant="outlined" size="small" startIcon={<Refresh />} onClick={fetchInvoices}>
                 Refresh
@@ -430,6 +697,7 @@ const InvoiceList = () => {
       </Paper>
 
       <Paper sx={{ width: "100%", overflow: "hidden", boxShadow: 2, borderRadius: 2 }}>
+<<<<<<< HEAD
         <TableContainer sx={{ maxHeight: 600 }}>
           <Table stickyHeader aria-label="invoices table">
             <TableHead>
@@ -609,6 +877,37 @@ const InvoiceList = () => {
         />
       </Paper>
 
+=======
+        <Box sx={{ width: "100%", height: 600 }}>
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.id}
+            loading={loading}
+            disableRowSelectionOnClick
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ 
+              pagination: { paginationModel: { page: 0, pageSize: 25 } } 
+            }}
+            localeText={{
+              noRowsLabel: "No Invoices Found",
+            }}
+            sx={{
+              width: "100%",
+              "& .MuiDataGrid-virtualScroller": {
+                overflowX: "auto !important"
+              },
+              "& .MuiDataGrid-columnHeaders": {
+                backgroundColor: "#f1f5f9",
+                fontWeight: "bold",
+              }
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Remarks Modal */}
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       <Modal open={remarksModal.open} onClose={() => setRemarksModal({ ...remarksModal, open: false })}>
         <Box sx={remarksModalStyle}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>

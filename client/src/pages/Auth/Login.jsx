@@ -2,7 +2,11 @@ import React, { useState } from "react";
 import { Alert, Box, IconButton, InputAdornment, Typography } from "@mui/material";
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, Login as LoginIcon } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
+<<<<<<< HEAD
 import { useNavigate, Link as RouterLink } from "react-router-dom";
+=======
+import { useNavigate } from "react-router-dom";
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 import { loginUser } from "../../redux/slices/authSlice";
 
 // Import reusable components
@@ -28,7 +32,11 @@ const Login = () => {
     event.preventDefault();
     const result = await dispatch(loginUser(formData));
     if (loginUser.fulfilled.match(result)) {
+<<<<<<< HEAD
       navigate("/dashboard", { replace: true });
+=======
+      navigate("/vendors");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     }
   };
 
@@ -79,6 +87,7 @@ const Login = () => {
         }
       />
 
+<<<<<<< HEAD
       <Box sx={{ textAlign: "right", mt: 1 }}>
         <Typography
           component={RouterLink}
@@ -95,6 +104,8 @@ const Login = () => {
         </Typography>
       </Box>
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       {/* Reusable Submit Button */}
       <CustomButton loading={loading} loadingText="Signing In..." icon={LoginIcon}>
         Login
@@ -103,4 +114,8 @@ const Login = () => {
   );
 };
 
+<<<<<<< HEAD
 export default Login;
+=======
+export default Login;// VITE WATCH TEST 123
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

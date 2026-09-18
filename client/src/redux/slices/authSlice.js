@@ -36,6 +36,7 @@ export const fetchProfile = createAsyncThunk(
   }
 );
 
+<<<<<<< HEAD
 export const forgotPassword = createAsyncThunk(
   "auth/forgotPassword",
   async (payload, { rejectWithValue }) => {
@@ -64,17 +65,22 @@ export const resetPassword = createAsyncThunk(
   }
 );
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const initialState = {
   user: storedAuth?.user || null,
   token: storedAuth?.token || null,
   loading: false,
   error: null,
   isAuthenticated: Boolean(storedAuth?.token),
+<<<<<<< HEAD
   passwordReset: {
     loading: false,
     error: null,
     message: null,
   },
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };
 
 const authSlice = createSlice({
@@ -92,10 +98,13 @@ const authSlice = createSlice({
     clearAuthError(state) {
       state.error = null;
     },
+<<<<<<< HEAD
 
     clearPasswordResetStatus(state) {
       state.passwordReset = { loading: false, error: null, message: null };
     },
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   },
   extraReducers: (builder) => {
     builder
@@ -122,6 +131,7 @@ const authSlice = createSlice({
         state.token = null;
         state.isAuthenticated = false;
         clearStoredAuth();
+<<<<<<< HEAD
       })
       .addCase(forgotPassword.pending, (state) => {
         state.passwordReset.loading = true;
@@ -148,10 +158,16 @@ const authSlice = createSlice({
       .addCase(resetPassword.rejected, (state, action) => {
         state.passwordReset.loading = false;
         state.passwordReset.error = action.payload;
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       });
   },
 });
 
+<<<<<<< HEAD
 export const { logout, clearAuthError, clearPasswordResetStatus } = authSlice.actions;
+=======
+export const { logout, clearAuthError } = authSlice.actions;
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 export default authSlice.reducer;

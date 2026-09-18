@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 const { Op, literal } = require("sequelize");
 const { AuditLog } = require("../models");
 const logger = require("../utils/logger");
@@ -20,6 +21,10 @@ const assertValidModuleConfig = (config) => {
     );
   }
 };
+=======
+const { Op } = require("sequelize");
+const { AuditLog } = require("../models");
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 const buildWhere = (search, searchFields = []) => {
   if (!search || !searchFields.length) {
@@ -35,6 +40,7 @@ const buildWhere = (search, searchFields = []) => {
   };
 };
 
+<<<<<<< HEAD
 // Combines the generic text-search where clause with an optional
 // module-specific structured filter (e.g. invoices' date/vendor/plant/status
 // filters). Modules that don't define buildExtraWhere behave exactly as
@@ -95,6 +101,9 @@ const sanitizeModelPayload = (model, data = {}) => {
 
 const getAll = async (config, query = {}) => {
   assertValidModuleConfig(config);
+=======
+const getAll = async (config, query = {}) => {
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const {
     page = 1,
     pageSize = 10,
@@ -111,11 +120,16 @@ const getAll = async (config, query = {}) => {
   const selectedSortOrder =
     String(sortOrder).toUpperCase() === "ASC" ? "ASC" : "DESC";
 
+<<<<<<< HEAD
   const searchWhere = buildWhere(search, config.searchFields);
   const extraWhere = config.buildExtraWhere ? config.buildExtraWhere(query) : {};
 
   const { count, rows } = await config.model.findAndCountAll({
     where: mergeWhere(searchWhere, extraWhere),
+=======
+  const { count, rows } = await config.model.findAndCountAll({
+    where: buildWhere(search, config.searchFields),
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     include: config.include || [],
     order: [[selectedSortField, selectedSortOrder]],
     offset,
@@ -132,7 +146,10 @@ const getAll = async (config, query = {}) => {
 };
 
 const getById = async (config, id) => {
+<<<<<<< HEAD
   assertValidModuleConfig(config);
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   return await config.model.findByPk(id, {
     include: config.include || [],
   });
@@ -146,6 +163,7 @@ const writeAuditLog = async ({
   oldData = null,
   newData = null,
 }) => {
+<<<<<<< HEAD
   try {
     await AuditLog.create({
       UserID: req.user?.UserID || null,
@@ -200,6 +218,21 @@ const create = async (config, data, req) => {
   }
 
   const record = await config.model.create(createData);
+=======
+  await AuditLog.create({
+    UserID: req.user?.UserID || null,
+    TableName: tableName,
+    RecordID: Number(recordId) || null,
+    ActionType: actionType,
+    OldData: oldData ? JSON.stringify(oldData) : null,
+    NewData: newData ? JSON.stringify(newData) : null,
+    IPAddress: req.ip,
+  });
+};
+
+const create = async (config, data, req) => {
+  const record = await config.model.create(data);
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   await writeAuditLog({
     req,
@@ -209,11 +242,18 @@ const create = async (config, data, req) => {
     newData: record,
   });
 
+<<<<<<< HEAD
   return (await reloadRecord(config, record[config.primaryKey])) || record;
 };
 
 const update = async (config, id, data, req) => {
   assertValidModuleConfig(config);
+=======
+  return await getById(config, record[config.primaryKey]);
+};
+
+const update = async (config, id, data, req) => {
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const record = await config.model.findByPk(id);
 
   if (!record) {
@@ -221,8 +261,12 @@ const update = async (config, id, data, req) => {
   }
 
   const oldData = record.toJSON();
+<<<<<<< HEAD
   const updateData = sanitizeModelPayload(config.model, data);
   await record.update(updateData);
+=======
+  await record.update(data);
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   await writeAuditLog({
     req,
@@ -233,17 +277,25 @@ const update = async (config, id, data, req) => {
     newData: record,
   });
 
+<<<<<<< HEAD
   return (await reloadRecord(config, id)) || record;
 };
 
 const remove = async (config, id, req) => {
   assertValidModuleConfig(config);
+=======
+  return await getById(config, id);
+};
+
+const remove = async (config, id, req) => {
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   const record = await config.model.findByPk(id);
 
   if (!record) {
     return null;
   }
 
+<<<<<<< HEAD
   // Soft-delete modules (masters referenced by historical records) flip
   // their active flag instead of being destroyed, so a deactivated vendor,
   // vehicle type, etc. never breaks a past contract/invoice that still
@@ -266,6 +318,8 @@ const remove = async (config, id, req) => {
     return record;
   }
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   await record.destroy();
 
   await writeAuditLog({
@@ -279,6 +333,7 @@ const remove = async (config, id, req) => {
   return record;
 };
 
+<<<<<<< HEAD
 // Generic bulk-create for any module whose registry entry defines
 // `bulkUploadFields` (task item 11: bulk Excel upload for every master
 // except Contract Master and Add Invoice). Rows come pre-parsed from the
@@ -327,11 +382,16 @@ const bulkUpload = async (config, rows, req) => {
   return results;
 };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 module.exports = {
   getAll,
   getById,
   create,
   update,
   remove,
+<<<<<<< HEAD
   bulkUpload,
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };

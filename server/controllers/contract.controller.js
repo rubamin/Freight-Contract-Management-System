@@ -1,6 +1,9 @@
 const multer = require("multer");
 const contractService = require("../services/contract.service");
+<<<<<<< HEAD
 const contractDocumentService = require("../services/contractDocument.service");
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const ApiResponse = require("../utils/ApiResponse");
 
 // Multer memory storage configuration - to accept a single excel sheet upload only
@@ -217,6 +220,7 @@ const bulkUpdateRateMatrix = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 // Contract download - Excel and PDF (task item 6). Both render from the
 // exact same buildContractDocumentData() shape in
 // contractDocument.service.js, so the two formats always show identical
@@ -268,6 +272,8 @@ const downloadContractDocument = async (req, res) => {
   }
 };
 
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 module.exports = {
   uploadExcel: handleUpload(upload.single("rateMatrix")), 
   createContract,
@@ -277,5 +283,8 @@ module.exports = {
   listContracts,
   getRateMatrix,
   bulkUpdateRateMatrix,
+<<<<<<< HEAD
   downloadContractDocument,
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 };

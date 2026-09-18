@@ -1,4 +1,5 @@
 const authService = require("../services/authService");
+<<<<<<< HEAD
 const {
   PASSWORD_RESET_REQUEST_MESSAGE,
   PASSWORD_RESET_SUCCESS_MESSAGE,
@@ -7,6 +8,8 @@ const {
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const buildResetLink = (rawToken) =>
   `${CLIENT_URL}/reset-password?token=${rawToken}`;
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
 const login = async (req, res) => {
   try {
@@ -41,6 +44,7 @@ const me = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 const forgotPassword = async (req, res) => {
   try {
     await authService.forgotPassword(req.body, { buildResetLink });
@@ -79,3 +83,9 @@ module.exports = {
   forgotPassword,
   resetPassword,
 };
+=======
+module.exports = {
+  login,
+  me,
+};
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

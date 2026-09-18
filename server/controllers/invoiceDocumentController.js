@@ -8,13 +8,18 @@ const {
   ContractRateMatrix, 
   DestinationMaster, 
   VehicleType,
+<<<<<<< HEAD
   WeightMaster,
   Plant,
   PlantLocation,
+=======
+  Plant,
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   StatusMaster
 } = require("../models");
 const sequelize = require("../config/database");
 const { Op } = require("sequelize"); 
+<<<<<<< HEAD
 const nodemailer = require("nodemailer");
 const fs = require('fs');
 const path = require('path');
@@ -33,6 +38,15 @@ const {
 } = require("../constants/notificationTypes");
 
 // State mapping dictionary based on GST number prefix
+=======
+const axios = require("axios");
+const nodemailer = require("nodemailer");
+const fs = require('fs');
+const path = require('path');
+
+const geoCache = {};
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const GST_STATE_MAP = {
   "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
   "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
@@ -44,13 +58,17 @@ const GST_STATE_MAP = {
   "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh"
 };
 
+<<<<<<< HEAD
 // Helper function to extract state name from GST number
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const getStateFromGST = (gstNumber) => {
   if (!gstNumber || typeof gstNumber !== "string" || gstNumber.length < 2) return "Gujarat";
   const stateCode = gstNumber.substring(0, 2);
   return GST_STATE_MAP[stateCode] || "Gujarat";
 };
 
+<<<<<<< HEAD
 const normalizeRequiredDateForDb = (value, fieldName) => {
   const normalized = normalizeDateForDb(value);
   if (!normalized) {
@@ -74,11 +92,68 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: DEFAULT_NOTIFICATION_EMAIL,
+=======
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const getCoordinates = async (cityName) => {
+  const cleanCity = String(cityName || "").replace(/\([^)]*\)/g, "").trim().toUpperCase();
+  if (!cleanCity) return null;
+  if (geoCache[cleanCity]) return geoCache[cleanCity];
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanCity + ", India")}&format=json&limit=1`;
+    const response = await axios.get(url, {
+      headers: { "User-Agent": "FreightContractManagementSystem/5.0" },
+      timeout: 3000 
+    });
+
+    if (response.data && response.data.length > 0) {
+      const coords = { lat: response.data[0].lat, lon: response.data[0].lon };
+      geoCache[cleanCity] = coords;
+      return coords;
+    }
+    return null;
+  } catch (error) {
+    console.error("GEOCODE ERROR DETAILS:", error.message || error);
+    return null; 
+  }
+};
+
+const getCommercialDrivingDistanceKM = async (fromCity, toCity) => {
+  try {
+    const sourceCoords = await getCoordinates(fromCity);
+    if (!sourceCoords) return 0;
+    
+    await sleep(200); 
+    const targetCoords = await getCoordinates(toCity);
+    if (!targetCoords) return 0;
+
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${sourceCoords.lon},${sourceCoords.lat};${targetCoords.lon},${targetCoords.lat}?overview=false`;
+    const response = await axios.get(osrmUrl, { timeout: 3000 });
+
+    if (response.data && response.data.routes && response.data.routes.length > 0) {
+      return parseFloat((response.data.routes[0].distance / 1000).toFixed(2)); 
+    }
+    return 0;
+  } catch (error) {
+    console.error("OSRM DISTANCE ERROR DETAILS:", error.message || error);
+    return 0;
+  }
+};
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER || "dhvanidr1204@gmail.com",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     pass: process.env.EMAIL_PASS || ""
   }
 });
 
+<<<<<<< HEAD
 // Function to send audit discrepancy notification emails with attachments
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmentsList = []) => {
   try {
     if (!recipientEmail) return false;
@@ -118,7 +193,10 @@ const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmen
                 ${invoiceData.hasExtraCharge ? `<li><strong>Extra Charge Applied:</strong> ₹ ${invoiceData.extraCharge.toFixed(2)}</li>` : ""}
                 ${invoiceData.hasDetainCharge ? `<li><strong>Detention Charge Applied:</strong> ₹ ${invoiceData.detainCharge.toFixed(2)}</li>` : ""}
                 ${invoiceData.hasContractMatchFailure ? `<li><strong>Contract Match Failure:</strong> No active contract found for Vendor.</li>` : ""}
+<<<<<<< HEAD
                 ${invoiceData.hasVehicleTypeNotFound ? `<li><strong>Vehicle Type Error:</strong> Vehicle type is not available in master.</li>` : ""}
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
                 ${invoiceData.hasVehicleTypeMismatch ? `<li><strong>Vehicle Type / Rate Mismatch:</strong> Mismatch detected in vehicle type capacity or destination rate matrix.</li>` : ""}
               </ul>
             </div>
@@ -126,13 +204,22 @@ const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmen
             <div class="section-title">📋 Invoice Summary Details</div>
             <table class="info-table">
               <tr><td class="label">Invoice Number</td><td><strong>${invoiceData.invoiceNo}</strong></td></tr>
+<<<<<<< HEAD
               <tr><td class="label">Customer Name</td><td>${invoiceData.CustomerName}</td></tr>
+=======
+              <tr><td class="label">Customer Name</td><td>${invoiceData.customerName}</td></tr>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
               <tr><td class="label">Invoice Date</td><td>${invoiceData.invoiceDate}</td></tr>
               <tr><td class="label">LR Date</td><td>${invoiceData.lrDate}</td></tr>
               <tr><td class="label">Vendor Name</td><td>${invoiceData.vendorName} (${invoiceData.vendorCode})</td></tr>
               <tr><td class="label">GST Number</td><td>${invoiceData.gstNumber}</td></tr>
+<<<<<<< HEAD
               <tr><td class="label">LR Number</td><td>${invoiceData.lrNo}</td></tr>
               <tr><td class="label">Route</td><td>${invoiceData.LocationName} → ${invoiceData.toStation}</td></tr>
+=======
+              <tr><td class="label">LR Number / Vehicle</td><td>${invoiceData.lrNo} / ${invoiceData.vehicleNo}</td></tr>
+              <tr><td class="label">Route</td><td>${invoiceData.fromStation} → ${invoiceData.toStation}</td></tr>
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
               <tr><td class="label">Actual Weight</td><td>${invoiceData.actualWeight} MT</td></tr>
             </table>
 
@@ -168,7 +255,11 @@ const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmen
     }
 
     await transporter.sendMail({
+<<<<<<< HEAD
       from: DEFAULT_NOTIFICATION_EMAIL,
+=======
+      from: process.env.EMAIL_USER || "dhvanidr1204@gmail.com",
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       to: recipientEmail,
       subject: `Action Required: Freight Audit Discrepancy — Invoice [${invoiceData.invoiceNo}]`,
       html: htmlContent,
@@ -182,6 +273,7 @@ const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmen
   }
 };
 
+<<<<<<< HEAD
 // Maps the persisted VerificationStatus value to the same label the
 // Invoice List page's status Chip shows (see InvoiceList.jsx statusConfig),
 // so the emailed table reads the same as the on-screen table.
@@ -565,6 +657,8 @@ const applyPreApprovedOverride = (isPreApproved, auditResult) => {
 };
 
 // Main controller to process and upload invoices, validate rules, and execute database transactions
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const uploadDocument = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -585,6 +679,7 @@ const uploadDocument = async (req, res) => {
       return res.status(400).json({ message: "No invoice records provided." });
     }
 
+<<<<<<< HEAD
     // Fetch default plant fallback if location is not provided
     let defaultPlant = await Plant.findOne({ transaction });
     if (!defaultPlant) {
@@ -592,16 +687,30 @@ const uploadDocument = async (req, res) => {
     }
 
     // Fetch default status for invoice module
+=======
+    let defaultPlant = await Plant.findOne({ transaction });
+    if (!defaultPlant) {
+      defaultPlant = await Plant.create({ PlantCode: "PLT001", PlantName: "Default Plant", IsActive: true }, { transaction });
+    }
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     let defaultStatus = await StatusMaster.findOne({ where: { ModuleName: "INVOICE" }, transaction });
     if (!defaultStatus) {
       defaultStatus = await StatusMaster.findOne({ transaction });
       if (!defaultStatus) {
+<<<<<<< HEAD
         defaultStatus = await StatusMaster.create({ StatusName: PENDING_VERIFICATION_STATUS_NAME, ModuleName: "INVOICE" }, { transaction });
+=======
+        defaultStatus = await StatusMaster.create({ StatusName: "Pending Verification", ModuleName: "INVOICE" }, { transaction });
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       }
     }
     const statusIdToUse = defaultStatus.StatusID;
 
+<<<<<<< HEAD
     // Map incoming files by fieldname
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     const filesMap = {};
     if (Array.isArray(req.files)) {
       req.files.forEach(file => {
@@ -615,17 +724,24 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+<<<<<<< HEAD
     // Ensure uploads directory exists
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     const uploadsDir = path.join(__dirname, '../uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
+<<<<<<< HEAD
     // Loop through each invoice row in the payload
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     for (let i = 0; i < invoiceRows.length; i++) {
       const row = invoiceRows[i];
       const gstNumber = String(row.gstNo || "").trim();
       const invoiceNo = String(row.invoiceNo || "").trim();
+<<<<<<< HEAD
       // Bug fix: the Add Invoice grid sends this field as `customerName`
       // (see AddInvoice.jsx payloadRows) - reading `row.CustomerName` here
       // always read undefined, so Customer Name was silently saved as
@@ -669,21 +785,46 @@ const uploadDocument = async (req, res) => {
         }
       }
 
+=======
+      const customerName = String(row.customerName || "").trim();
+      const invoiceDateFormatted = row.invoiceDate || new Date().toISOString().split('T')[0];
+      const lrDateFormatted = row.lrDate || new Date().toISOString().split('T')[0];
+      const lrNo = String(row.lrNo || "").trim();
+      const vehicleNo = String(row.vehicleNo || "").trim();
+      const vehicleTypeId = row.vehicleTypeId || null;
+      const locationId = row.locationId || null;
+      const fromStation = String(row.fromStation || "").trim();
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       const toStation = String(row.toStation || "").trim();
       const actualWeight = parseFloat(row.actualWeight || 0);
       const freightCharge = parseFloat(row.freightCharge || 0);
       const detainCharge = parseFloat(row.detainCharge || 0);
       const extraCharge = parseFloat(row.extraCharge || 0);
       const totalBilledAmount = parseFloat(row.total || 0);
+<<<<<<< HEAD
 
       let doc1Path = null, doc2Path = null, doc3Path = null;
       let doc1OriginalName = null, doc2OriginalName = null, doc3OriginalName = null;
+=======
+      const preApproval = String(row.preAppr || "No").trim();
+
+      let doc1Path = null;
+      let doc2Path = null;
+      let doc3Path = null;
+
+      let doc1OriginalName = null;
+      let doc2OriginalName = null;
+      let doc3OriginalName = null;
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
       const fileKey1 = `doc1_${i}`;
       const fileKey2 = `doc2_${i}`;
       const fileKey3 = `doc3_${i}`;
 
+<<<<<<< HEAD
       // Handle Document 1 file write
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       if (filesMap[fileKey1]) {
         const file = filesMap[fileKey1];
         doc1OriginalName = file.originalname || 'Document1.pdf';
@@ -695,7 +836,10 @@ const uploadDocument = async (req, res) => {
         doc1Path = `uploads/${uniqueFileName}`;
       }
 
+<<<<<<< HEAD
       // Handle Document 2 file write
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       if (filesMap[fileKey2]) {
         const file = filesMap[fileKey2];
         doc2OriginalName = file.originalname || 'Document2.pdf';
@@ -707,7 +851,10 @@ const uploadDocument = async (req, res) => {
         doc2Path = `uploads/${uniqueFileName}`;
       }
 
+<<<<<<< HEAD
       // Handle Document 3 file write
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       if (filesMap[fileKey3]) {
         const file = filesMap[fileKey3];
         doc3OriginalName = file.originalname || 'Document3.pdf';
@@ -721,6 +868,7 @@ const uploadDocument = async (req, res) => {
 
       if (!gstNumber || !invoiceNo) continue;
 
+<<<<<<< HEAD
       // --- VENDOR & GST RESOLUTION (shared helper) ---
       const { vendor, vendorGst, extractedPAN } = await resolveVendorAndGst(gstNumber, CustomerName, transaction);
 
@@ -775,6 +923,153 @@ const uploadDocument = async (req, res) => {
           actualWeight, freightCharge, calculatedExpectedFreight, totalBilledAmount,
           variance, finalAuditDecision, auditRemarks, extraCharge, detainCharge,
           hasExtraCharge, hasDetainCharge, hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeNotFound, hasVehicleTypeMismatch
+=======
+      const extractedPAN = gstNumber.substring(2, 12);
+
+      let vendor = await Vendor.findOne({ where: { PANNo: extractedPAN }, transaction });
+      if (!vendor) {
+        vendor = await Vendor.create({
+          VendorCode: `VND-${Date.now().toString().slice(-6)}`,
+          VendorName: customerName || `Auto Synchronized Vendor (${extractedPAN})`,
+          PANNo: extractedPAN,
+          IsActive: true
+        }, { transaction });
+      }
+
+      const derivedStateName = getStateFromGST(gstNumber);
+      let vendorGst = await VendorGST.findOne({ where: { GSTNumber: gstNumber, VendorID: vendor.VendorID }, transaction });
+      if (!vendorGst) {
+        vendorGst = await VendorGST.create({
+          VendorID: vendor.VendorID,
+          GSTNumber: gstNumber,
+          StateName: derivedStateName,
+          IsDefault: false
+        }, { transaction });
+      }
+
+      let evaluatedDistanceKM = await getCommercialDrivingDistanceKM(fromStation, toStation);
+      const activeContract = await ContractMaster.findOne({ where: { VendorID: vendor.VendorID, Status: "ACTIVE" }, transaction });
+
+      let calculatedExpectedFreight = 0;
+      let targetContractId = null;
+      let auditRemarks = "";
+      let finalAuditDecision = "DISCREPANCY";
+      let matchedDestinationFound = false;
+      let hasVehicleTypeMismatch = false;
+
+      const destination = await DestinationMaster.findOne({ 
+        where: { City: { [Op.like]: toStation.trim() } }, 
+        transaction 
+      });
+
+      if (activeContract) {
+        targetContractId = activeContract.ContractID;
+
+        if (destination) {
+          const destinationMatrixEntries = await ContractRateMatrix.findAll({
+            where: { 
+              ContractID: activeContract.ContractID, 
+              DestinationID: destination.DestinationID
+            },
+            include: [{ model: VehicleType, as: "vehicleType" }],
+            transaction
+          });
+
+          if (destinationMatrixEntries && destinationMatrixEntries.length > 0) {
+            matchedDestinationFound = true;
+            let selectedMatrix = null;
+
+            if (vehicleTypeId) {
+              selectedMatrix = destinationMatrixEntries.find(m => 
+                String(m.VehicleTypeID || m.vehicleType?.VehicleTypeID) === String(vehicleTypeId) &&
+                parseFloat(m.vehicleType?.Capacity || 0) >= actualWeight
+              );
+              if (!selectedMatrix) hasVehicleTypeMismatch = true;
+            }
+
+            if (!selectedMatrix) {
+              selectedMatrix = destinationMatrixEntries.find(m => m.vehicleType && parseFloat(m.vehicleType.Capacity || 0) >= actualWeight);
+            }
+
+            if (!selectedMatrix) {
+              const validEntries = destinationMatrixEntries.filter(m => m.vehicleType && m.vehicleType.Capacity !== undefined);
+              if (validEntries.length > 0) {
+                validEntries.sort((a, b) => parseFloat(b.vehicleType.Capacity || 0) - parseFloat(a.vehicleType.Capacity || 0));
+                selectedMatrix = validEntries[0];
+              } else {
+                selectedMatrix = destinationMatrixEntries[0];
+              }
+            }
+
+            if (selectedMatrix) {
+              const matrixBaseRate = parseFloat(selectedMatrix.BaseRate || 0);
+              calculatedExpectedFreight = matrixBaseRate;
+              auditRemarks = `Contract matched successfully. Destination: '${toStation}', Base Rate: Rs ${matrixBaseRate.toFixed(2)}.`;
+            }
+          }
+        }
+      }
+
+      let variance = 0;
+      let hasContractMatchFailure = false;
+      let hasDestinationMismatch = false;
+
+      if (!activeContract) {
+        hasContractMatchFailure = true;
+        finalAuditDecision = "DISCREPANCY";
+        auditRemarks = `No active contract found for vendor with PAN '${extractedPAN}'.`;
+      } else if (!destination || !matchedDestinationFound) {
+        hasDestinationMismatch = true;
+        finalAuditDecision = "DISCREPANCY";
+        auditRemarks = `Destination '${toStation}' is not available in the contract rate matrix.`;
+      } else if (hasVehicleTypeMismatch) {
+        finalAuditDecision = "DISCREPANCY";
+        auditRemarks = `Vehicle type or rate capacity mismatch for destination '${toStation}'.`;
+      } else {
+        variance = freightCharge - calculatedExpectedFreight;
+        if (freightCharge <= calculatedExpectedFreight + 1.0 && !hasVehicleTypeMismatch) {
+          finalAuditDecision = "APPROVED";
+          auditRemarks = `Verification passed successfully against contract rate of Rs ${calculatedExpectedFreight.toFixed(2)}.`;
+        } else {
+          finalAuditDecision = "DISCREPANCY";
+          auditRemarks = `Discrepancy detected! Expected rate: Rs ${calculatedExpectedFreight.toFixed(2)}, Billed: Rs ${freightCharge.toFixed(2)}, Variance: Rs ${variance.toFixed(2)}.`;
+        }
+      }
+
+      const hasExtraCharge = extraCharge > 0;
+      const hasDetainCharge = detainCharge > 0;
+      const isPreApproved = preApproval.toLowerCase() === "yes" || preApproval === "1" || preApproval === true;
+
+      let emailStatusLog = "";
+      if (!isPreApproved && (hasExtraCharge || hasDetainCharge || hasContractMatchFailure || hasDestinationMismatch || hasVehicleTypeMismatch || finalAuditDecision === "DISCREPANCY")) {
+        let recipientEmail = process.env.EMAIL_USER || "dhvanidr1204@gmail.com";
+        if (locationId) {
+          const approvalConfig = await sequelize.query(`
+            SELECT TOP 1 PrimaryEmail, OptionalEmail, IsPrimaryActive, IsOptionalActive 
+            FROM ApprovalConfig 
+            WHERE LocationID = :locationId
+          `, {
+            replacements: { locationId },
+            type: sequelize.QueryTypes.SELECT,
+            transaction
+          });
+
+          if (approvalConfig && approvalConfig.length > 0) {
+            if (approvalConfig[0].IsPrimaryActive && approvalConfig[0].PrimaryEmail) {
+              recipientEmail = approvalConfig[0].PrimaryEmail;
+            } else if (approvalConfig[0].IsOptionalActive && approvalConfig[0].OptionalEmail) {
+              recipientEmail = approvalConfig[0].OptionalEmail;
+            }
+          }
+        }
+
+        const mailSent = await sendAuditNotificationEmail({
+          invoiceNo, customerName, invoiceDate: invoiceDateFormatted, lrDate: lrDateFormatted, vendorName: vendor.VendorName,
+          vendorCode: vendor.VendorCode, gstNumber, lrNo, vehicleNo, fromStation, toStation,
+          actualWeight, freightCharge, calculatedExpectedFreight, totalBilledAmount,
+          variance, finalAuditDecision, auditRemarks, extraCharge, detainCharge,
+          hasExtraCharge, hasDetainCharge, hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeMismatch
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         }, recipientEmail, [
           doc1Path ? { filePath: doc1Path, originalName: doc1OriginalName } : null, 
           doc2Path ? { filePath: doc2Path, originalName: doc2OriginalName } : null, 
@@ -784,16 +1079,20 @@ const uploadDocument = async (req, res) => {
         if (mailSent) {
           emailStatusLog = ` | Mail Sent to: ${recipientEmail}`;
           auditRemarks += emailStatusLog;
+<<<<<<< HEAD
 
           await safeNotify({
             type: NOTIFICATION_TYPE_EMAIL_SENT,
             message: `Audit notification email sent for invoice ${invoiceNo} to ${recipientEmail}.`,
           }, transaction);
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
         }
       }
 
       const totalExpectedPrice = calculatedExpectedFreight + detainCharge + extraCharge;
 
+<<<<<<< HEAD
       // The Remarks column stores what the user actually typed in the Add
       // Invoice grid; the system's own audit outcome (auditRemarks) is
       // appended after it for context instead of overwriting it, so nothing
@@ -851,6 +1150,40 @@ const uploadDocument = async (req, res) => {
       }, transaction);
 
       // Create invoice item record
+=======
+      const [insertedHeader] = await sequelize.query(`
+        INSERT INTO [InvoiceHeader] (
+          [InvoiceNumber], [CustomerName], [InvoiceDate], [LRDate], [VendorID], [VendorGSTID], 
+          [PlantID], [ContractID], [LRNumber], [VehicleNumber], [VehicleTypeID],
+          [TotalWeight], [DistanceKM], [BasicFreight], [DetainCharges], 
+          [ExtraCharges], [TotalInvoiceAmount], [InvoiceStatusID], [UploadedDate],
+          [FromStation], [ToStation], [Remarks], [Doc1Path], [Doc2Path], [Doc3Path]
+        )
+        OUTPUT INSERTED.[InvoiceID]
+        VALUES (
+          :invoiceNo, :customerName, :invoiceDate, :lrDate, :vendorId, :vendorGstId,
+          :plantId, :contractId, :lrNo, :vehicleNo, :vehicleTypeId,
+          :actualWeight, :distanceKm, :basicFreight, :detainCharges,
+          :extraCharges, :totalAmount, :statusId, GETDATE(),
+          :fromStation, :toStation, :remarks, :doc1, :doc2, :doc3
+        );
+      `, {
+        replacements: {
+          invoiceNo, customerName, invoiceDate: invoiceDateFormatted, lrDate: lrDateFormatted, vendorId: vendor.VendorID,
+          vendorGstId: vendorGst.VendorGSTID, plantId: defaultPlant.PlantID,
+          contractId: targetContractId, lrNo, vehicleNo, vehicleTypeId: vehicleTypeId || null,
+          actualWeight, distanceKm: evaluatedDistanceKM, basicFreight: freightCharge,
+          detainCharges: detainCharge, extraCharges: extraCharge, totalAmount: totalBilledAmount,
+          statusId: statusIdToUse, fromStation, toStation, remarks: auditRemarks,
+          doc1: doc1Path, doc2: doc2Path, doc3: doc3Path
+        },
+        type: sequelize.QueryTypes.INSERT,
+        transaction
+      });
+
+      const newInvoiceID = insertedHeader[0].InvoiceID;
+
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       await InvoiceItem.create({
         InvoiceID: newInvoiceID,
         DestinationID: destination ? destination.DestinationID : null,
@@ -860,7 +1193,10 @@ const uploadDocument = async (req, res) => {
         FreightAmount: freightCharge
       }, { transaction });
 
+<<<<<<< HEAD
       // Create invoice verification audit record
+=======
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       await sequelize.query(`
         INSERT INTO [InvoiceVerification] (
           [InvoiceID], [ContractID], [ExpectedAmount], 
@@ -879,27 +1215,36 @@ const uploadDocument = async (req, res) => {
     }
 
     await transaction.commit();
+<<<<<<< HEAD
     return res.status(201).json({
       success: true,
       message: "Invoices processed successfully with files saved and mail sent with original names!",
     });
+=======
+    return res.status(200).json({ message: "Invoices processed successfully with files saved and mail sent with original names!" });
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
   } catch (error) {
     if (transaction && !transaction.finished) {
       try { await transaction.rollback(); } catch(e) { console.error("Rollback error", e); }
     }
     console.error("CRITICAL UPLOAD ERROR:", error.original || error);
+<<<<<<< HEAD
     const isClientError = /required and must be a valid date|Invalid JSON format in invoices payload|No invoice records provided/i.test(
       error.message || ""
     );
     return res.status(isClientError ? 400 : 500).json({
       success: false,
+=======
+    return res.status(500).json({ 
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       message: error.message || "Fatal server error during processing.",
       errorDetails: error.original?.message || error.sqlMessage || error.toString()
     });
   }
 };
 
+<<<<<<< HEAD
 // Bulk-edit endpoint powering the Edit Invoice page. Accepts the same row
 // shape the Add Invoice grid sends (plus a required `invoiceId` per row),
 // and lets the user update one or many invoices' fields in a single request
@@ -1178,3 +1523,6 @@ const updateInvoices = async (req, res) => {
 };
 
 module.exports = { uploadDocument, sendSelectedInvoicesMail, updateInvoices };
+=======
+module.exports = { uploadDocument };
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c

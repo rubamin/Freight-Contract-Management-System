@@ -1,4 +1,5 @@
 // controllers/masterSearchController.js
+<<<<<<< HEAD
 const { Vendor, VendorGST, DestinationMaster, CustomerMaster, sequelize } = require("../models");
 
 const getInvoiceMasterSuggestions = async (req, res) => {
@@ -40,14 +41,43 @@ const getInvoiceMasterSuggestions = async (req, res) => {
       raw: true
     });
     const toStations = [...new Set(destinations.map(d => d.City).filter(Boolean))];
+=======
+const { VendorGST, InvoiceHeader } = require("../models");
+
+const getInvoiceMasterSuggestions = async (req, res) => {
+  try {
+    const vendorGsts = await VendorGST.findAll({
+      attributes: ['VendorGSTID', 'GSTNumber', 'VendorID'],
+      raw: true
+    });
+
+    // Added CustomerName to attributes list
+    const invoiceHeaders = await InvoiceHeader.findAll({
+      attributes: ['ToStation', 'FromStation', 'CustomerName'],
+      raw: true
+    });
+
+    const toStations = [...new Set(invoiceHeaders.map(i => i.ToStation).filter(Boolean))];
+    const fromStations = [...new Set(invoiceHeaders.map(i => i.FromStation).filter(Boolean))];
+    
+    // Extract unique customer names safely
+    const customers = [...new Set(invoiceHeaders.map(i => i.CustomerName).filter(Boolean))];
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 
     return res.status(200).json({
       success: true,
       data: {
+<<<<<<< HEAD
         vendors: vendors || [],
         vendorGsts: vendorGsts || [],
         toStations: toStations || [],
         customers: customers || []
+=======
+        vendorGsts: vendorGsts || [],
+        toStations: toStations || [],
+        fromStations: fromStations || [],
+        customers: customers || [] // Return unique customer names list
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
       }
     });
   } catch (error) {
@@ -56,6 +86,7 @@ const getInvoiceMasterSuggestions = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 // Creates a new Customer Master record from the Add Invoice grid's inline
 // "+ Add Customer" action, so a new customer never requires leaving the
 // invoice form. Silently no-ops (still returns success) if the name
@@ -105,3 +136,6 @@ const createCustomerFromInvoice = async (req, res) => {
   }
 };
 module.exports = { getInvoiceMasterSuggestions, createCustomerFromInvoice };
+=======
+module.exports = { getInvoiceMasterSuggestions };
+>>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
