@@ -32,13 +32,7 @@ router.delete("/:id", contractController.deleteContract);
 
 router.get("/rate-matrix/:id", contractController.getRateMatrix);
 
-<<<<<<< HEAD
-// Contract download - Excel and PDF (task item 6), both rendering the
-// same underlying data via contractDocument.service.js.
-router.get("/:id/download/:type", contractController.downloadContractDocument);
 
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 // Add this route alongside your existing contract routes
 router.put(
   "/rate-matrix/bulk-update/:id", 

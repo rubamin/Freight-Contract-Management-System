@@ -11,16 +11,8 @@ const ContractMaster = sequelize.define(
     },
     ContractNo: {
       type: DataTypes.STRING(100),
-<<<<<<< HEAD
-      // Bug fix (task item 4): this used to be `unique: true` on its own,
-      // making ContractNo globally unique across every vendor - so two
-      // different vendors could never both have a Contract No. "01". The
-      // real uniqueness rule is composite (VendorID, ContractNo); see the
-      // `indexes` option below and migration_v2.sql step 13 for the
-      // matching DB-level unique index.
-=======
       unique: true,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       allowNull: false,
     },
     VendorID: {
@@ -82,18 +74,7 @@ const ContractMaster = sequelize.define(
     createdAt: "CreatedAt", // Maps native Sequelize timestamp hooks to your exact uppercase column
     updatedAt: "UpdatedAt",
     underscored: false,
-<<<<<<< HEAD
-    indexes: [
-      {
-        // Composite uniqueness (task item 4): ContractNo only needs to be
-        // unique per vendor, not globally.
-        unique: true,
-        fields: ["VendorID", "ContractNo"],
-        name: "UQ_ContractMaster_Vendor_ContractNo",
-      },
-    ],
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   }
 );
 

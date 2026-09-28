@@ -46,77 +46,11 @@ export const removeModuleRecord = createAsyncThunk(
   }
 );
 
-<<<<<<< HEAD
-export const fetchModuleRecordById = createAsyncThunk(
-  "module/fetchModuleRecordById",
-  async ({ config, id }, { rejectWithValue }) => {
-    try {
-      const response = await moduleService.getRecordById({
-        apiGroup: config.apiGroup,
-        moduleName: config.moduleName,
-        id,
-      });
-
-      return response.data.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch record"
-      );
-    }
-  }
-);
-
-export const createModuleRecord = createAsyncThunk(
-  "module/createModuleRecord",
-  async ({ config, data }, { rejectWithValue }) => {
-    try {
-      const response = await moduleService.createRecord({
-        apiGroup: config.apiGroup,
-        moduleName: config.moduleName,
-        data,
-      });
-
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to create record"
-      );
-    }
-  }
-);
-
-export const updateModuleRecord = createAsyncThunk(
-  "module/updateModuleRecord",
-  async ({ config, id, data }, { rejectWithValue }) => {
-    try {
-      const response = await moduleService.updateRecord({
-        apiGroup: config.apiGroup,
-        moduleName: config.moduleName,
-        id,
-        data,
-      });
-
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to update record"
-      );
-    }
-  }
-);
-
-const initialState = {
-  recordsByModule: {},
-  totalRecordsByModule: {},
-  currentRecord: null,
-  loading: false,
-  saving: false,
-=======
 const initialState = {
   recordsByModule: {},
   totalRecordsByModule: {},
   loading: false,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   error: null,
 };
 
@@ -127,12 +61,7 @@ const moduleSlice = createSlice({
     clearModuleError(state) {
       state.error = null;
     },
-<<<<<<< HEAD
-    clearCurrentModuleRecord(state) {
-      state.currentRecord = null;
-    },
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   },
   extraReducers: (builder) => {
     builder
@@ -156,51 +85,12 @@ const moduleSlice = createSlice({
           (record) =>
             record[action.payload.idField] !== action.payload.id
         );
-<<<<<<< HEAD
-      })
-      .addCase(fetchModuleRecordById.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchModuleRecordById.fulfilled, (state, action) => {
-        state.loading = false;
-        state.currentRecord = action.payload;
-      })
-      .addCase(fetchModuleRecordById.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload;
-      })
-      .addCase(createModuleRecord.pending, (state) => {
-        state.saving = true;
-        state.error = null;
-      })
-      .addCase(createModuleRecord.fulfilled, (state) => {
-        state.saving = false;
-      })
-      .addCase(createModuleRecord.rejected, (state, action) => {
-        state.saving = false;
-        state.error = action.payload;
-      })
-      .addCase(updateModuleRecord.pending, (state) => {
-        state.saving = true;
-        state.error = null;
-      })
-      .addCase(updateModuleRecord.fulfilled, (state) => {
-        state.saving = false;
-      })
-      .addCase(updateModuleRecord.rejected, (state, action) => {
-        state.saving = false;
-        state.error = action.payload;
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       });
   },
 });
 
-<<<<<<< HEAD
-export const { clearModuleError, clearCurrentModuleRecord } = moduleSlice.actions;
-=======
 export const { clearModuleError } = moduleSlice.actions;
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 export default moduleSlice.reducer;

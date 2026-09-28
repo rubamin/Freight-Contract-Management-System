@@ -1,9 +1,6 @@
 const sequelize = require("../config/database");
 const contractRepository = require("../repositories/contract.repository");
 const xlsx = require("xlsx");
-<<<<<<< HEAD
-const { CONTRACT_STATUS } = require("../constants/contractStatus");
-=======
 
 const CONTRACT_STATUS = {
   DRAFT: "DRAFT",
@@ -11,7 +8,7 @@ const CONTRACT_STATUS = {
   EXPIRED: "EXPIRED",
   CANCELLED: "CANCELLED"
 };
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 const REQUIRED_MESSAGES = {
   VendorID: "Vendor selection is required.",
@@ -80,18 +77,11 @@ const validateMasterReferences = async (contractData, errors) => {
 const validateDuplicateContract = async (contractData, errors, excludeContractId = null) => {
   const existingContract = await contractRepository.getContractByNumber(
     contractData.ContractNo,
-<<<<<<< HEAD
-    contractData.VendorID,
-    excludeContractId
-  );
-  if (existingContract) {
-    errors.push("This vendor already has a contract with this Contract Number.");
-=======
     excludeContractId
   );
   if (existingContract) {
     errors.push("Contract Number already exists in the system.");
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   }
 
   if (contractData.Status === CONTRACT_STATUS.ACTIVE) {
@@ -153,33 +143,17 @@ const processRateMatrixExcel = async (fileBuffer, contractId, startDate, endDate
 
     if (headerRow) {
       const destColIdx = headerRow.findIndex(cell => String(cell || "").trim().toUpperCase() === "DESTINATION");
-<<<<<<< HEAD
-
-      // The "KM" column (distance) sits right after DESTINATION and before
-      // the weight-slab columns (5 MT, 7 MT, ...). It must be excluded from
-      // weightColumns below - it is not a rate column - and its value read
-      // separately per row and stored as DistanceKM on every rate entry
-      // created for that destination.
-      const kmColIdx = headerRow.findIndex(cell => String(cell || "").trim().toUpperCase() === "KM");
-
-      const weightColumns = [];
-      for (let c = destColIdx + 1; c < headerRow.length; c++) {
-        if (c === kmColIdx) continue;
-=======
       
       const weightColumns = [];
       for (let c = destColIdx + 1; c < headerRow.length; c++) {
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
         const cellValue = String(headerRow[c] || "").trim();
         if (cellValue) {
           const numericWeight = parseFloat(cellValue.replace(/[^0-9.]/g, "")) || 0;
           let weightRecord = await contractRepository.findOrCreateWeight({
-<<<<<<< HEAD
-            Weight: numericWeight,
-=======
             FromWeight: numericWeight,
             ToWeight: numericWeight,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
             WeightUnit: "MT"
           }, transaction);
 
@@ -198,24 +172,11 @@ const processRateMatrixExcel = async (fileBuffer, contractId, startDate, endDate
 
         const destination = await contractRepository.findOrCreateDestination({
           City: destinationName,
-<<<<<<< HEAD
-          // State intentionally omitted - DestinationMaster.beforeValidate hook
-          // resolves District/State from the nationwide lookup when City
-          // maps to exactly one district; ambiguous/unknown cities are left
-          // blank rather than hardcoded to Gujarat.
-        }, transaction);
-
-        const rowDistanceKm = kmColIdx !== -1 ? parseFloat(row[kmColIdx]) : NaN;
-        const distanceKm = !isNaN(rowDistanceKm) ? rowDistanceKm : null;
-
-        for (let colIdx = destColIdx + 1; colIdx < row.length; colIdx++) {
-          if (colIdx === kmColIdx) continue;
-=======
           State: "Gujarat"
         }, transaction);
 
         for (let colIdx = destColIdx + 1; colIdx < row.length; colIdx++) {
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
           const weightId = weightColumns[colIdx];
           const rateValue = parseFloat(row[colIdx]);
 
@@ -226,10 +187,7 @@ const processRateMatrixExcel = async (fileBuffer, contractId, startDate, endDate
               WeightID: weightId,
               VehicleTypeID: null,
               BaseRate: rateValue,
-<<<<<<< HEAD
-              DistanceKM: distanceKm,
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
               EffectiveFrom: startDate,
               EffectiveTo: endDate
             }, transaction);
@@ -276,14 +234,8 @@ const processRateMatrixExcel = async (fileBuffer, contractId, startDate, endDate
         if (destinationName && vehicleTypeName && !isNaN(freightAmount) && freightAmount > 0) {
           const destination = await contractRepository.findOrCreateDestination({
             City: destinationName,
-<<<<<<< HEAD
-            // State intentionally omitted - DestinationMaster.beforeValidate hook
-            // resolves District/State from the nationwide lookup when City
-            // maps to exactly one district; ambiguous/unknown cities are left
-            // blank rather than hardcoded to Gujarat.
-=======
             State: "Gujarat"
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
           }, transaction);
 
           const parsedCapacity = parseFloat(vehicleTypeName.replace(/[^0-9.]/g, "")) || 0;
@@ -318,11 +270,8 @@ const createContract = async ({ data, file, user }) => {
       {
         ...contractData,
         CreatedBy: user?.UserID || null,
-<<<<<<< HEAD
-        CreatedAt: sequelize.literal("GETDATE()"),
-=======
         CreatedAt: new Date(),
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       },
       transaction
     );
@@ -359,11 +308,8 @@ const updateContract = async ({ contractId, data, file, user }) => {
       {
         ...contractData,
         UpdatedBy: user?.UserID || null,
-<<<<<<< HEAD
-        UpdatedAt: sequelize.literal("GETDATE()"),
-=======
         UpdatedAt: new Date(),
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       },
       transaction
     );
@@ -385,45 +331,13 @@ const updateContract = async ({ contractId, data, file, user }) => {
           if (destName) {
             const destination = await contractRepository.findOrCreateDestination({
               City: destName,
-<<<<<<< HEAD
-              // State intentionally omitted - DestinationMaster.beforeValidate hook
-              // resolves District/State from the nationwide lookup when City
-              // maps to exactly one district; ambiguous/unknown cities are left
-              // blank rather than hardcoded to Gujarat.
-=======
               State: "Gujarat"
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
             }, transaction);
 
             let weightId = null;
             let vehicleTypeId = null;
 
-<<<<<<< HEAD
-            // Sheet 1 (domestic destinations by weight slab): the frontend
-            // sends a `weight` display object ({ Weight, WeightUnit }) for
-            // each slab of a newly added destination, but never a
-            // pre-existing WeightID (there isn't one yet). Resolve/create
-            // the real WeightMaster record from that object instead of
-            // gating on WeightID already being set - otherwise every
-            // weight slab for the same new destination resolves to the
-            // same NULL WeightID and collides under the
-            // (ContractID, DestinationID, VehicleTypeID, WeightID) unique
-            // constraint as soon as a second slab is inserted.
-            if (rateRow.weight && (rateRow.weight.Weight !== undefined || rateRow.weight.weight !== undefined)) {
-              const numWeight = parseFloat(rateRow.weight.Weight ?? rateRow.weight.weight ?? 0);
-              const weightUnit = rateRow.weight.WeightUnit || rateRow.weight.weightUnit || "MT";
-              const weightRecord = await contractRepository.findOrCreateWeight({
-                Weight: numWeight,
-                WeightUnit: weightUnit
-              }, transaction);
-              weightId = weightRecord.WeightID;
-            } else if (rateRow.VehicleTypeID !== undefined && rateRow.VehicleTypeID !== null) {
-              // Sheet 2 (additional destinations by vehicle type): the
-              // frontend already sends a real VehicleTypeID selected from
-              // Vehicle Type Master, so use it directly.
-              vehicleTypeId = rateRow.VehicleTypeID;
-            } else if (rateRow.vehicleType) {
-=======
             if (rateRow.WeightID !== undefined && rateRow.WeightID !== null && rateRow.weight) {
               const numWeight = parseFloat(rateRow.weight.FromWeight || rateRow.weight.fromWeight || 0);
               const weightRecord = await contractRepository.findOrCreateWeight({
@@ -433,7 +347,7 @@ const updateContract = async ({ contractId, data, file, user }) => {
               }, transaction);
               weightId = weightRecord.WeightID;
             } else if (rateRow.VehicleTypeID !== undefined && rateRow.VehicleTypeID !== null && rateRow.vehicleType) {
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
               const vName = rateRow.vehicleType.VehicleName || rateRow.vehicleType.vehicleName;
               const parsedCap = parseFloat(vName.replace(/[^0-9.]/g, "")) || 0;
               const vehicleRecord = await contractRepository.findOrCreateVehicleType({
@@ -534,8 +448,5 @@ module.exports = {
   getAllContracts,
   getRateMatrixByContractId,
   bulkUpdateRateMatrix,
-<<<<<<< HEAD
 };
-=======
-};
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+

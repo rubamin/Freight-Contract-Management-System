@@ -150,11 +150,8 @@ const AddVendor = () => {
         <PageHeader
           title="Add Vendor"
           breadcrumbs={[
-<<<<<<< HEAD
-            { label: "Dashboard", path: "/dashboard" },
-=======
             { label: "Dashboard", path: "/" },
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
             { label: "Vendor", path: "/vendors" },
             { label: "Add" },
           ]}

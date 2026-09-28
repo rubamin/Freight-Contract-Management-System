@@ -70,19 +70,6 @@ upload.vendorExcel = multer({
   },
 }).single("file"); // Expects single file upload payload under form-data key "file"
 
-<<<<<<< HEAD
-// Generic bulk-upload middleware for any master module (task item 11) -
-// same allowed extensions/size limit as vendor bulk upload, reused here
-// instead of duplicating the filter/limits for every master.
-upload.moduleExcel = multer({
-  storage,
-  fileFilter: vendorExcelFileFilter,
-  limits: {
-    fileSize: VENDOR_EXCEL_FILE_SIZE_LIMIT,
-  },
-}).single("file");
-
-/* ========================================================
    New Addition: Profile Photo Upload Middleware Configuration
    ======================================================== */
 const PROFILE_PHOTO_ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
@@ -121,5 +108,5 @@ upload.profilePhoto = multer({
 }).single("profilePhoto");
 
 =======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 module.exports = upload;

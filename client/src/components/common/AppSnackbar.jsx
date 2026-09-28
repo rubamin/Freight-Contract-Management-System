@@ -17,15 +17,7 @@ const AppSnackbar = ({
         vertical: "top",
         horizontal: "right",
       }}
-<<<<<<< HEAD
-      // Bug fix (task item 2): Snackbar's default top offset placed it
-      // directly over the fixed 72px-tall AppBar header, so alert/success
-      // banners visually overlapped header content (e.g. on the
-      // Dashboard). Pushing it below the header height fixes that on every
-      // page that uses AppSnackbar, not just Dashboard.
-      sx={{ top: { xs: 16, sm: 88 } }}
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
     >
       <Alert
         severity={severity}
@@ -33,12 +25,8 @@ const AppSnackbar = ({
         elevation={0}
         onClose={onClose}
         sx={{
-<<<<<<< HEAD
-          minWidth: { xs: "auto", sm: 360 },
-          maxWidth: { xs: "calc(100vw - 32px)", sm: 480 },
-=======
           minWidth: 360,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
           borderRadius: 3,
           fontWeight: 500,
           alignItems: "center",

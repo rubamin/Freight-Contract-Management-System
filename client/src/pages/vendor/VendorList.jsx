@@ -23,10 +23,7 @@ import axios from "axios";
 
 import { fetchVendors, removeVendor } from "../../redux/slices/vendorSlice";
 import useDebounce from "../../hooks/useDebounce";
-<<<<<<< HEAD
-import usePermissions from "../../hooks/usePermissions";
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 /* Common Shared UI Components */
 import LoadingOverlay from "../../components/common/LoadingOverlay";
@@ -49,10 +46,7 @@ const VendorList = () => {
 
   const { vendors, loading, totalRecords } = useSelector((state) => state.vendor);
   const { token } = useSelector((state) => state.auth);
-<<<<<<< HEAD
-  const { canEdit, loaded: permissionsLoaded } = usePermissions();
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
   /* Live Search Configuration States */
   const [search, setSearch] = useState("");
@@ -325,10 +319,7 @@ const VendorList = () => {
             color="warning"
             size="small"
             onClick={() => navigate(`/vendors/edit/${params.row.VendorID}`)}
-<<<<<<< HEAD
-            sx={{ display: permissionsLoaded && canEdit("vendors") ? "inline-flex" : "none" }}
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
           >
             <Edit fontSize="small" />
           </IconButton>
@@ -361,11 +352,8 @@ const VendorList = () => {
           title="Vendor Master"
           subtitle="Manage all vendor records from a single place."
           breadcrumbs={[
-<<<<<<< HEAD
-            { label: "Dashboard", path: "/dashboard" },
-=======
             { label: "Dashboard", path: "/" },
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
             { label: "Master" },
             { label: "Vendor" },
           ]}
@@ -432,8 +420,6 @@ const VendorList = () => {
         {/* Future Filters layout settings inside here */}
       </FilterPanel>
 
-<<<<<<< HEAD
-=======
       {/* Table grid listing operations toolbar module context row */}
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 2, mb: 1 }}>
         <TableToolbar
@@ -453,7 +439,7 @@ const VendorList = () => {
         />
       </Box>
 
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       {/* Master Content Data Table Display Card component using CustomDataGrid */}
       <PageCard
         sx={{

@@ -1,9 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
-<<<<<<< HEAD
-const { literal } = require("sequelize");
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 const Role = sequelize.define(
   "Role",
@@ -32,11 +29,8 @@ const Role = sequelize.define(
 
     CreatedAt: {
       type: DataTypes.DATE,
-<<<<<<< HEAD
-      defaultValue: literal("GETDATE()"),
-=======
       defaultValue: DataTypes.NOW,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
     },
   },
   {

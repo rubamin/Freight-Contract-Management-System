@@ -1,16 +1,6 @@
 import { createTheme } from "@mui/material/styles";
 
-<<<<<<< HEAD
-// Centralized brand tokens. The sidebar (layouts/DashboardLayout.jsx) is the
-// visual source of truth for the app's dark/accent colors — these values
-// mirror it exactly so pages can reference theme.palette.sidebar.* instead
-// of re-hardcoding the same hex codes.
-const SIDEBAR_BACKGROUND = "#1E293B";
-const SIDEBAR_TEXT_MUTED = "#CBD5E1";
-const ACCENT_BLUE = "#2563EB"; // matches sidebar's active-item highlight
 
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const theme = createTheme({
   palette: {
     mode: "light",
@@ -23,28 +13,14 @@ const theme = createTheme({
     },
 
     secondary: {
-<<<<<<< HEAD
-      main: ACCENT_BLUE,
-=======
       main: "#2563EB",
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       light: "#60A5FA",
       dark: "#1D4ED8",
       contrastText: "#FFFFFF",
     },
 
-<<<<<<< HEAD
-    // Custom palette group so any page can pull the exact sidebar colors
-    // (theme.palette.sidebar.background / .textMuted / .activeItem)
-    // instead of hardcoding them inline.
-    sidebar: {
-      background: SIDEBAR_BACKGROUND,
-      textMuted: SIDEBAR_TEXT_MUTED,
-      activeItem: ACCENT_BLUE,
-    },
 
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
     background: {
       default: "#F4F7FC",
       paper: "#FFFFFF",

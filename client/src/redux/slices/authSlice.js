@@ -36,51 +36,14 @@ export const fetchProfile = createAsyncThunk(
   }
 );
 
-<<<<<<< HEAD
-export const forgotPassword = createAsyncThunk(
-  "auth/forgotPassword",
-  async (payload, { rejectWithValue }) => {
-    try {
-      const response = await authService.forgotPassword(payload);
-      return response.data.message;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to request password reset"
-      );
-    }
-  }
-);
 
-export const resetPassword = createAsyncThunk(
-  "auth/resetPassword",
-  async (payload, { rejectWithValue }) => {
-    try {
-      const response = await authService.resetPassword(payload);
-      return response.data.message;
-    } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to reset password"
-      );
-    }
-  }
-);
-
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 const initialState = {
   user: storedAuth?.user || null,
   token: storedAuth?.token || null,
   loading: false,
   error: null,
   isAuthenticated: Boolean(storedAuth?.token),
-<<<<<<< HEAD
-  passwordReset: {
-    loading: false,
-    error: null,
-    message: null,
-  },
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 };
 
 const authSlice = createSlice({
@@ -98,13 +61,7 @@ const authSlice = createSlice({
     clearAuthError(state) {
       state.error = null;
     },
-<<<<<<< HEAD
 
-    clearPasswordResetStatus(state) {
-      state.passwordReset = { loading: false, error: null, message: null };
-    },
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
   },
   extraReducers: (builder) => {
     builder
@@ -131,43 +88,12 @@ const authSlice = createSlice({
         state.token = null;
         state.isAuthenticated = false;
         clearStoredAuth();
-<<<<<<< HEAD
-      })
-      .addCase(forgotPassword.pending, (state) => {
-        state.passwordReset.loading = true;
-        state.passwordReset.error = null;
-        state.passwordReset.message = null;
-      })
-      .addCase(forgotPassword.fulfilled, (state, action) => {
-        state.passwordReset.loading = false;
-        state.passwordReset.message = action.payload;
-      })
-      .addCase(forgotPassword.rejected, (state, action) => {
-        state.passwordReset.loading = false;
-        state.passwordReset.error = action.payload;
-      })
-      .addCase(resetPassword.pending, (state) => {
-        state.passwordReset.loading = true;
-        state.passwordReset.error = null;
-        state.passwordReset.message = null;
-      })
-      .addCase(resetPassword.fulfilled, (state, action) => {
-        state.passwordReset.loading = false;
-        state.passwordReset.message = action.payload;
-      })
-      .addCase(resetPassword.rejected, (state, action) => {
-        state.passwordReset.loading = false;
-        state.passwordReset.error = action.payload;
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
       });
   },
 });
 
-<<<<<<< HEAD
-export const { logout, clearAuthError, clearPasswordResetStatus } = authSlice.actions;
-=======
 export const { logout, clearAuthError } = authSlice.actions;
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 export default authSlice.reducer;

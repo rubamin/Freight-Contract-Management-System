@@ -1,9 +1,6 @@
 const multer = require("multer");
 const contractService = require("../services/contract.service");
-<<<<<<< HEAD
-const contractDocumentService = require("../services/contractDocument.service");
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 const ApiResponse = require("../utils/ApiResponse");
 
 // Multer memory storage configuration - to accept a single excel sheet upload only
@@ -220,60 +217,7 @@ const bulkUpdateRateMatrix = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-// Contract download - Excel and PDF (task item 6). Both render from the
-// exact same buildContractDocumentData() shape in
-// contractDocument.service.js, so the two formats always show identical
-// fields/order/branding rather than drifting independently.
-const downloadContractDocument = async (req, res) => {
-  try {
-    const { id, type } = req.params;
-    const contract = await contractService.getContractById(id);
 
-    if (!contract) {
-      return res.status(404).json({ success: false, message: "Contract not found." });
-    }
-
-    if (type === "excel") {
-      const workbook = await contractDocumentService.buildContractExcel(contract);
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="Contract-${contract.ContractNo}.xlsx"`
-      );
-      await workbook.xlsx.write(res);
-      return res.end();
-    }
-
-    if (type === "pdf") {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="Contract-${contract.ContractNo}.pdf"`
-      );
-      const doc = contractDocumentService.buildContractPdf(contract);
-      doc.pipe(res);
-      return;
-    }
-
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid download type - expected "excel" or "pdf".',
-    });
-  } catch (error) {
-    console.error("Error inside downloadContractDocument controller:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to generate the contract document.",
-    });
-  }
-};
-
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
 module.exports = {
   uploadExcel: handleUpload(upload.single("rateMatrix")), 
   createContract,
@@ -283,8 +227,5 @@ module.exports = {
   listContracts,
   getRateMatrix,
   bulkUpdateRateMatrix,
-<<<<<<< HEAD
-  downloadContractDocument,
-=======
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 };

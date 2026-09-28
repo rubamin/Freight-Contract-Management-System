@@ -3,13 +3,9 @@ const {
   InvoiceVerification,
   VerificationError,
   InvoiceApprovalHistory,
-<<<<<<< HEAD
-} = require("../models");
-const sequelize = require("../config/database");
-=======
   InvoiceStatusHistory,
 } = require("../models");
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
 
 const runInvoiceVerification = async ({ invoiceId, userId }) => {
   const invoice = await InvoiceHeader.findByPk(invoiceId);
@@ -54,11 +50,8 @@ const runInvoiceVerification = async ({ invoiceId, userId }) => {
     DifferenceAmount: differenceAmount,
     VerificationStatus: errors.length ? "FAILED" : "PASSED",
     VerifiedBy: userId,
-<<<<<<< HEAD
-    VerifiedDate: sequelize.literal("GETDATE()"),
-=======
     VerifiedDate: new Date(),
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   });
 
   if (errors.length) {
@@ -93,25 +86,14 @@ const approveInvoice = async ({ invoiceId, statusId, remarks, userId }) => {
     InvoiceStatusID: statusId,
   });
 
-<<<<<<< HEAD
-  // Single canonical record of this status transition (previously split
-  // across this table and a second, never-created "InvoiceStatusHistory"
-  // table - see migration_v2.sql step 8 and the InvoiceApprovalHistory
-  // model for the merge rationale).
   const approval = await InvoiceApprovalHistory.create({
     InvoiceID: invoiceId,
-    OldStatusID: oldStatusId,
-=======
-  const approval = await InvoiceApprovalHistory.create({
-    InvoiceID: invoiceId,
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
     ApprovedBy: userId,
     StatusID: statusId,
     Remarks: remarks,
   });
 
-<<<<<<< HEAD
-=======
   await InvoiceStatusHistory.create({
     InvoiceID: invoiceId,
     OldStatusID: oldStatusId,
@@ -120,7 +102,7 @@ const approveInvoice = async ({ invoiceId, statusId, remarks, userId }) => {
     Remarks: remarks,
   });
 
->>>>>>> d4b652ff6f505203c633408f126f957ad20b6b8c
+
   return approval;
 };
 
