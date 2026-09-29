@@ -16,7 +16,7 @@ const AuthLayout = () => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-
+        overflowY: "auto",
         background: "linear-gradient(135deg, #1E3A8A 0%, #2563EB 50%, #60A5FA 100%)",
         p: 2,
       }}

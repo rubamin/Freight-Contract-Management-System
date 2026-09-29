@@ -10,7 +10,7 @@ const CustomButton = ({
   fullWidth = true,
   variant = "contained",
   size = "large",
-
+  disabled = false,
   sx = {},
 }) => {
   return (
@@ -19,8 +19,7 @@ const CustomButton = ({
       variant={variant}
       size={size}
       type={type}
-      disabled={loading}
-
+      disabled={loading || disabled}
       startIcon={!loading && Icon ? <Icon /> : undefined}
       sx={{
         mt: 4,

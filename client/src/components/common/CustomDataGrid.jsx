@@ -1,6 +1,22 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 
+// Table column order standard (task item 8): every list table in the app
+// enforces Sr. No. first, data columns in the middle, Action always last.
+// Centralizing it here means pages using CustomDataGrid (Vendor, Contract,
+// etc.) get it automatically instead of each page repeating the same
+// column-reordering logic.
+const buildSrNoColumn = ({ rows, page, pageSize }) => ({
+  field: "srNo",
+  headerName: "Sr. No.",
+  width: 90,
+  sortable: false,
+  filterable: false,
+  renderCell: (params) => {
+    const rowIndex = rows.findIndex((row) => row === params.row);
+    return page * pageSize + rowIndex + 1;
+  },
+});
 
 const CustomDataGrid = ({
   rows,
@@ -15,11 +31,21 @@ const CustomDataGrid = ({
   onSortModelChange,
   sx = {},
 }) => {
+  const orderedColumns = useMemo(() => {
+    const dataColumns = columns.filter((col) => col.field !== "Action");
+    const actionColumn = columns.find((col) => col.field === "Action");
+
+    return [
+      buildSrNoColumn({ rows, page, pageSize }),
+      ...dataColumns,
+      ...(actionColumn ? [actionColumn] : []),
+    ];
+  }, [columns, rows, page, pageSize]);
+
   return (
     <DataGrid
       rows={rows}
-      columns={columns}
-
+      columns={orderedColumns}
       getRowId={getRowId}
       autoHeight
       loading={loading}
@@ -57,8 +83,7 @@ const CustomDataGrid = ({
           borderTop: "1px solid #E5E7EB",
         },
         "& .MuiDataGrid-virtualScroller": {
-          overflowX: "hidden",
-
+          overflowX: "auto",
         },
         ...sx,
       }}

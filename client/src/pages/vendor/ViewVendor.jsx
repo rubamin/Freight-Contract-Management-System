@@ -61,8 +61,7 @@ const ViewVendor = () => {
         <PageHeader
           title="Vendor Details"
           breadcrumbs={[
-            { label: "Dashboard", path: "/" },
-
+            { label: "Dashboard", path: "/dashboard" },
             { label: "Vendor", path: "/vendors" },
             { label: "View" },
           ]}

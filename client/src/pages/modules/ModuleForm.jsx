@@ -21,7 +21,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
-import { lookupDistrictForCity } from "../../constants/indiaCityDistrictLookup";
+import { lookupDistrictForCity, DEFAULT_STATE } from "../../constants/gujaratCityLookup";
 import { getRecords } from "../../services/moduleService";
 import { buildDuplicateKey, buildExistingKeySet } from "../../utils/duplicateCheck.js";
 import { playAlertSound } from "../../utils/alertSound.js";
@@ -47,54 +47,24 @@ const buildEmptyFormData = (formFields) => {
   return data;
 };
 
-// City/area -> District/State auto-fill (task item 7, nationwide). Only
-// applies to fields explicitly flagged for it, so this stays generic
-// rather than hardcoding "City" for every module that happens to have one.
-//
-// lookupDistrictForCity() returns an array - some city/area names exist in
-// more than one district/state (e.g. "Aurangabad" is both in Maharashtra
-// and Bihar):
-// - Exactly one match: auto-fill District/State immediately, as before.
-// - Zero matches: leave District/State blank and editable, as before.
-// - More than one match: leave District/State blank here - the District
-//   field itself renders as a picker in that case (see renderFormField
-//   below), and applyDistrictSelection() fills both fields once the user
-//   picks one of the offered districts.
+// City -> District/State auto-fill (task item 7). Only applies to fields
+// explicitly flagged for it, so this stays generic rather than hardcoding
+// "City" for every module that happens to have one.
 const applyAutoFill = (row, field, value) => {
   const next = { ...row, [field.name]: value };
   if (field.autoFillsDistrictState) {
-    const matches = lookupDistrictForCity(value);
-    if (matches.length === 1) {
-      next.District = matches[0].district;
-      next.State = matches[0].state;
-    } else {
-      next.District = "";
-      next.State = "";
-    }
+    next.District = lookupDistrictForCity(value);
+    next.State = DEFAULT_STATE;
   }
   return next;
 };
 
-// Fills District + State from a single chosen match, for City/area names
-// that resolve to more than one district/state (task item 7, nationwide).
-const applyDistrictSelection = (row, match) => ({
-  ...row,
-  District: match.district,
-  State: match.state,
-});
-
-// District/State stay read-only while the City lookup found exactly one
-// match, and become editable the moment it finds none (task item 6) - a
-// blank field the user can never fill in would otherwise leave the record
-// incomplete. When the City resolves to MULTIPLE districts, the District
-// field is rendered as an active picker instead of a disabled text field
-// (see renderFormField), so it must not be marked read-only here; State
-// stays read-only either way since it's always derived, never typed.
+// District/State stay read-only while the City lookup found a match, but
+// become editable the moment it doesn't (task item 6) - a blank field the
+// user can never fill in would otherwise leave the record incomplete.
 const resolveFieldReadOnly = (field, row) => {
   if (!field.autoFillDependent) return Boolean(field.readOnly);
-  const matches = lookupDistrictForCity(row.City);
-  if (matches.length > 1 && field.name === "District") return false;
-  return Boolean(field.readOnly) && matches.length >= 1;
+  return Boolean(field.readOnly) && Boolean(lookupDistrictForCity(row.City));
 };
 
 const normalizeFormValue = (field, value) => {
@@ -208,35 +178,6 @@ const ModuleForm = ({ configKey, config }) => {
     );
   };
 
-  // Called when the user picks one option from the District picker shown
-  // for a City/area that resolves to more than one district/state (task
-  // item 7, nationwide) - fills District + State together from that match.
-  const handleDistrictOptionSelect = (rowIndex, match) => {
-    setRows((prev) =>
-      prev.map((row, index) => (index === rowIndex ? applyDistrictSelection(row, match) : row))
-    );
-    setRowErrors((prev) =>
-      prev.map((rowErr, index) => (index === rowIndex ? { ...rowErr, District: "" } : rowErr))
-    );
-  };
-
-  // Blocks save when a City resolved to more than one district/state and
-  // the user hasn't picked one yet (task item 7, nationwide ambiguous
-  // cities like Aurangabad) - otherwise the record would save with a blank
-  // District/State despite the lookup having real options to offer.
-  const findAmbiguousDistrictRowErrors = () => {
-    const cityField = config.formFields.find((f) => f.autoFillsDistrictState);
-    if (!cityField) return rows.map(() => ({}));
-
-    return rows.map((row) => {
-      const matches = lookupDistrictForCity(row[cityField.name]);
-      if (matches.length > 1 && !row.District) {
-        return { District: "This city exists in multiple districts - please select one." };
-      }
-      return {};
-    });
-  };
-
   const addRow = () => {
     const maxRows = config.maxRows || 10;
     if (rows.length >= maxRows) return;
@@ -279,17 +220,6 @@ const ModuleForm = ({ configKey, config }) => {
     allRowErrors.some((rowErr) => Object.values(rowErr).some(Boolean));
 
   const handleEditSubmit = async () => {
-    const ambiguousRowErrors = findAmbiguousDistrictRowErrors();
-    if (hasAnyError(ambiguousRowErrors)) {
-      setRowErrors(ambiguousRowErrors);
-      setSnackbar({
-        open: true,
-        severity: "error",
-        message: "Please select a District for the city before saving.",
-      });
-      return;
-    }
-
     const result = await dispatch(
       updateModuleRecord({ config, id, data: buildSubmissionPayload(rows[0], config.formFields) })
     );
@@ -316,17 +246,6 @@ const ModuleForm = ({ configKey, config }) => {
   // validation error) are kept on screen with their error shown, so only
   // the failing rows need to be fixed and resubmitted.
   const handleAddSubmit = async () => {
-    const ambiguousRowErrors = findAmbiguousDistrictRowErrors();
-    if (hasAnyError(ambiguousRowErrors)) {
-      setRowErrors(ambiguousRowErrors);
-      setSnackbar({
-        open: true,
-        severity: "error",
-        message: "Please select a District for every row before saving.",
-      });
-      return;
-    }
-
     const duplicateRowErrors = findDuplicateRowErrors();
     if (hasAnyError(duplicateRowErrors)) {
       setRowErrors(duplicateRowErrors);
@@ -393,53 +312,6 @@ const ModuleForm = ({ configKey, config }) => {
     const fieldError = rowErrors[rowIndex]?.[field.name];
     const readOnly = resolveFieldReadOnly(field, row);
     const value = row[field.name] ?? "";
-
-    // District field for a City/area that resolves to more than one
-    // district/state (task item 7, nationwide) - render as a picker the
-    // user must choose from, instead of the usual read-only text field.
-    if (field.autoFillDependent && field.name === "District") {
-      const districtMatches = lookupDistrictForCity(row.City);
-      if (districtMatches.length > 1) {
-        // The row only stores plain District/State strings, so rebuild the
-        // "District — State" option label from them to find which (if any)
-        // of the current matches is already selected - keeps the Select
-        // controlled without needing a separate field on the row.
-        const currentOptionLabel = row.District && row.State ? `${row.District} — ${row.State}` : "";
-        const selectValue = districtMatches.some(
-          (m) => `${m.district} — ${m.state}` === currentOptionLabel
-        )
-          ? currentOptionLabel
-          : "";
-
-        return (
-          <Grid item xs={12} sm={6} key={field.name}>
-            <TextField
-              select
-              fullWidth
-              label={field.label}
-              value={selectValue}
-              error={Boolean(fieldError)}
-              helperText={fieldError || "This city exists in more than one district - pick one."}
-              onChange={(e) => {
-                const match = districtMatches.find(
-                  (m) => `${m.district} — ${m.state}` === e.target.value
-                );
-                if (match) handleDistrictOptionSelect(rowIndex, match);
-              }}
-            >
-              {districtMatches.map((m) => {
-                const optionLabel = `${m.district} — ${m.state}`;
-                return (
-                  <MenuItem key={optionLabel} value={optionLabel}>
-                    {optionLabel}
-                  </MenuItem>
-                );
-              })}
-            </TextField>
-          </Grid>
-        );
-      }
-    }
 
     if (field.type === "select") {
       return (

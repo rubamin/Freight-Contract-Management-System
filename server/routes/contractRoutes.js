@@ -32,6 +32,9 @@ router.delete("/:id", contractController.deleteContract);
 
 router.get("/rate-matrix/:id", contractController.getRateMatrix);
 
+// Contract download - Excel and PDF (task item 6), both rendering the
+// same underlying data via contractDocument.service.js.
+router.get("/:id/download/:type", contractController.downloadContractDocument);
 
 // Add this route alongside your existing contract routes
 router.put(

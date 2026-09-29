@@ -36,7 +36,7 @@ import FilterPanel from "../../components/common/FilterPanel";
 import CustomDataGrid from "../../components/common/CustomDataGrid";
 import TableToolbar from "../../components/common/TableToolbar";
 import useDebounce from "../../hooks/useDebounce";
-
+import usePermissions from "../../hooks/usePermissions";
 
 import {
   clearContractError,
@@ -45,7 +45,7 @@ import {
   removeContract,
 } from "../../redux/slices/contractSlice";
 import { getContractDownloadUrl } from "../../redux/api/contractAPI";
-
+import { getStoredToken } from "../../utils/storage";
 
 // Status color mapping for contract badges
 const statusColors = {
@@ -72,7 +72,7 @@ const buildExportValue = (value) => {
 const ContractList = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
+  const { canEdit, loaded: permissionsLoaded } = usePermissions();
 
   const {
     contracts,
@@ -204,10 +204,37 @@ const ContractList = () => {
     });
   };
 
-  // Handle file download for PDF or Rate Matrix Excel
-  const handleDownload = ({ id, type }) => {
-    window.open(getContractDownloadUrl({ id, type }), "_blank", "noopener");
+  // Handle file download for Contract PDF/Excel (task item 6). Fetched with
+  // the auth header attached and streamed to a Blob rather than
+  // window.open()'ing the URL directly - the download route sits behind
+  // authMiddleware, and a plain window.open() request carries no
+  // Authorization header, so it would always 401.
+  const handleDownload = async ({ id, type }) => {
+    try {
+      const token = getStoredToken();
+      const response = await fetch(getContractDownloadUrl({ id, type }), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
 
+      if (!response.ok) {
+        throw new Error(`Failed to download contract ${type}.`);
+      }
+
+      const blob = await response.blob();
+      const extension = type === "pdf" ? "pdf" : "xlsx";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Contract-${id}.${extension}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        severity: "error",
+        message: err.message || `Failed to download contract ${type}.`,
+      });
+    }
   };
 
   // Handle data export to Excel spreadsheet
@@ -282,39 +309,34 @@ const ContractList = () => {
               color="warning"
               onClick={() => navigate(`/contracts/edit/${params.row.ContractID}`)}
               aria-label="edit contract"
-
+              // Bug fix (task item 17): Edit is hidden, not just disabled,
+              // for users without Contract Master Edit permission.
+              sx={{ display: permissionsLoaded && canEdit("contracts") ? "inline-flex" : "none" }}
             >
               <Edit fontSize="small" />
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Download Contract PDF">
-            <span>
-              <IconButton
-                size="small"
-                color="primary"
-                disabled={!params.row.ContractPdfFileName}
-                onClick={() => handleDownload({ id: params.row.ContractID, type: "pdf" })}
-                aria-label="download contract pdf"
-              >
-                <Download fontSize="small" />
-              </IconButton>
-            </span>
+          <Tooltip title="Download as PDF">
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleDownload({ id: params.row.ContractID, type: "pdf" })}
+              aria-label="download contract as pdf"
+            >
+              <Download fontSize="small" />
+            </IconButton>
           </Tooltip>
 
-          <Tooltip title="Download Rate Matrix Excel">
-            <span>
-              <IconButton
-                size="small"
-                color="success"
-                disabled={!params.row.RateMatrixFileName}
-                onClick={() => handleDownload({ id: params.row.ContractID, type: "rate-matrix" })}
-                aria-label="download rate matrix excel"
-              >
-                <FileDownload fontSize="small" />
-              </IconButton>
-            </span>
-
+          <Tooltip title="Download as Excel">
+            <IconButton
+              size="small"
+              color="success"
+              onClick={() => handleDownload({ id: params.row.ContractID, type: "excel" })}
+              aria-label="download contract as excel"
+            >
+              <FileDownload fontSize="small" />
+            </IconButton>
           </Tooltip>
 
           <Tooltip title="Delete">
@@ -336,14 +358,12 @@ const ContractList = () => {
   ];
 
   return (
-    <Box sx={{ p: 3, maxWidth: "1200px", margin: "0 auto", width: "1000px", overflowX: "hidden" }}>
-
+    <Box sx={{ p: 3, width: "100%" }}>
       {/* Page Header Component */}
       <PageHeader
         title="Contract Master"
         breadcrumbs={[
-          { label: "Dashboard", path: "/vendors" },
-
+          { label: "Dashboard", path: "/dashboard" },
           { label: "Contract Master" },
         ]}
         buttonText="Create Contract"
@@ -455,9 +475,7 @@ const ContractList = () => {
 
       {/* Reusable Custom Data Grid Component */}
       <Paper sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: "1400px" }}>
-          <CustomDataGrid
-
+        <CustomDataGrid
             rows={rows}
             columns={columns}
             getRowId={(row) => row.ContractID}
@@ -478,8 +496,6 @@ const ContractList = () => {
               });
             }}
           />
-        </Box>
-
       </Paper>
 
       {/* Delete Confirmation Popup Dialog */}

@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-
+import React, { useState, useEffect } from "react";
 import {
   AppBar,
   Avatar,
@@ -14,43 +13,70 @@ import {
   Typography,
   Menu,
   MenuItem,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 
 import {
-  Dashboard,
-
+  Dashboard as DashboardIcon,
   Logout,
   People,
   AccountCircle,
   KeyboardArrowDown,
-
+  Person,
+  Settings,
+  Assessment,
+  ChevronLeft,
+  ChevronRight,
+  LocalShipping,
+  Place,
+  Scale,
+  DirectionsCar,
+  Groups,
+  ManageAccounts,
+  Menu as MenuIcon,
 } from "@mui/icons-material";
 
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 
 import { logout } from "../redux/slices/authSlice";
-import { moduleNavigation } from "../constants/moduleConfigs";
+import { MODULE_KEYS } from "../constants/modules";
+import { getMyPermissions } from "../services/userService";
+import useLocalStorageState from "../hooks/useLocalStorageState";
+import NotificationCenter from "../components/common/NotificationCenter";
 
-// Define fixed sidebar width
-const drawerWidth = 270;
+// Sidebar widths for the expanded and collapsed (icons-only) states
+const EXPANDED_DRAWER_WIDTH = 270;
+const COLLAPSED_DRAWER_WIDTH = 80;
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "sidebarCollapsed";
 
-// Combine static navigation items and dynamic configuration modules
-const navigationItems = [
-  {
-    label: "Vendor Master",
-    path: "/vendors",
-    icon: <People />,
-  },
-  ...moduleNavigation.map((item) => ({
-    label: item.title,
-    path: item.path,
-    icon: <Dashboard />,
-  })),
+// Every possible sidebar item, each tagged with the module permission key
+// that gates it (task item 3: "Build the sidebar dynamically from the
+// logged-in user's permission set rather than hardcoding a static list").
+// Dashboard, My Profile and My Settings have no gate - every authenticated
+// user sees those regardless of module permissions.
+const ALL_NAVIGATION_ITEMS = [
+  { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon />, moduleKey: null },
+  { label: "Vendor Master", path: "/vendors", icon: <People />, moduleKey: MODULE_KEYS.VENDOR_MASTER },
+  { label: "Contract Master", path: "/contracts", icon: <LocalShipping />, moduleKey: MODULE_KEYS.CONTRACT_MASTER },
+  { label: "Destination Master", path: "/masters/destinations", icon: <Place />, moduleKey: MODULE_KEYS.DESTINATION_MASTER },
+  { label: "Weight Master", path: "/masters/weights", icon: <Scale />, moduleKey: MODULE_KEYS.WEIGHT_MASTER },
+  { label: "Vehicle Type Master", path: "/masters/vehicle-types", icon: <DirectionsCar />, moduleKey: MODULE_KEYS.VEHICLE_TYPE_MASTER },
+  { label: "Customer Master", path: "/masters/customers", icon: <Groups />, moduleKey: MODULE_KEYS.CUSTOMER_MASTER },
+  { label: "Invoices", path: "/invoices", icon: <DashboardIcon />, moduleKey: MODULE_KEYS.INVOICES },
+  { label: "User Master", path: "/admin/users", icon: <ManageAccounts />, moduleKey: MODULE_KEYS.USER_MASTER },
+  { label: "Settings & Hierarchy", path: "/admin/settings", icon: <Settings />, moduleKey: MODULE_KEYS.SETTINGS_HIERARCHY },
+  { label: "Access Requests", path: "/admin/access-requests", icon: <ManageAccounts />, moduleKey: MODULE_KEYS.USER_MASTER },
+  { label: "Reports", path: "/reports", icon: <Assessment />, moduleKey: MODULE_KEYS.REPORTS },
+  { label: "My Profile", path: "/profile", icon: <Person />, moduleKey: null },
+  { label: "My Settings", path: "/settings/preferences", icon: <Settings />, moduleKey: null },
 ];
 
 const DashboardLayout = () => {
-
+  const theme = useTheme();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,6 +84,53 @@ const DashboardLayout = () => {
   // Extract authenticated user details from Redux state
   const { user } = useSelector((state) => state.auth);
 
+  // Module permissions drive which sidebar items render (task item 3).
+  // Admins get every item; everyone else only sees modules where
+  // CanView is true. Defaults to just the ungated items (Dashboard,
+  // My Profile, My Settings) while permissions are still loading, so the
+  // sidebar never flashes the full admin list before narrowing.
+  const [permissions, setPermissions] = useState({ isAdmin: false, modulePermissions: {} });
+
+  useEffect(() => {
+    let isMounted = true;
+    getMyPermissions()
+      .then((res) => {
+        if (isMounted) setPermissions(res.data.data);
+      })
+      .catch((err) => console.error("Failed to load sidebar permissions", err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const navigationItems = ALL_NAVIGATION_ITEMS.filter((item) => {
+    if (!item.moduleKey) return true;
+    if (permissions.isAdmin) return true;
+    return Boolean(permissions.modulePermissions?.[item.moduleKey]?.CanView);
+  });
+
+  // Sidebar collapsed/expanded state, persisted across refreshes
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState(
+    SIDEBAR_COLLAPSED_STORAGE_KEY,
+    false
+  );
+
+  // Bug fix (task item 2): the sidebar used to always render as a
+  // permanent, space-reserving drawer, which on phone-width screens left
+  // little to no room for actual page content. Below the "sm" breakpoint
+  // it now renders as an overlay drawer instead (task item 2's UI/UX
+  // responsiveness pass), closed by default and toggled via a hamburger
+  // button in the app bar.
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  const drawerWidth = isMobile
+    ? 0
+    : isSidebarCollapsed ? COLLAPSED_DRAWER_WIDTH : EXPANDED_DRAWER_WIDTH;
+
+  const handleSidebarToggle = () => {
+    setIsSidebarCollapsed((prev) => !prev);
+  };
 
   // Profile menu anchor state
   const [anchorEl, setAnchorEl] = useState(null);
@@ -99,20 +172,29 @@ const DashboardLayout = () => {
           ml: `${drawerWidth}px`,
           width: `calc(100% - ${drawerWidth}px)`,
           height: 72,
-
+          transition: "margin-left 0.2s ease, width 0.2s ease",
           zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
         <Toolbar
           sx={{
             minHeight: "72px !important",
-            px: 3,
-
+            px: { xs: 2, sm: 3 },
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
+          {/* Hamburger toggle - mobile only, opens the overlay sidebar */}
+          {isMobile && (
+            <IconButton
+              onClick={() => setMobileDrawerOpen(true)}
+              sx={{ mr: 1 }}
+              aria-label="Open navigation menu"
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
 
           {/* Dynamic Page Title Section */}
           <Box>
@@ -120,8 +202,7 @@ const DashboardLayout = () => {
               variant="h6"
               sx={{
                 fontWeight: 600,
-                color: "#1E293B",
-
+                color: theme.palette.text.primary,
               }}
             >
               {pageTitle}
@@ -130,6 +211,7 @@ const DashboardLayout = () => {
 
           {/* User Profile Trigger Section */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <NotificationCenter />
 
             <Box
               onClick={handleMenuOpen}
@@ -194,7 +276,12 @@ const DashboardLayout = () => {
                 </Typography>
               </Box>
               <Divider sx={{ my: 0.5 }} />
-
+              <MenuItem onClick={() => { handleMenuClose(); navigate("/profile"); }}>
+                <ListItemIcon sx={{ minWidth: 30 }}>
+                  <Person fontSize="small" />
+                </ListItemIcon>
+                My Profile
+              </MenuItem>
               <MenuItem onClick={handleLogoutClick} sx={{ color: "#DC2626" }}>
                 <ListItemIcon sx={{ color: "#DC2626", minWidth: 30 }}>
                   <Logout fontSize="small" />
@@ -208,57 +295,86 @@ const DashboardLayout = () => {
 
       {/* ===================== Sidebar Navigation Drawer ===================== */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? "temporary" : "permanent"}
+        open={isMobile ? mobileDrawerOpen : true}
+        onClose={() => setMobileDrawerOpen(false)}
+        ModalProps={{ keepMounted: true }}
         sx={{
-          width: drawerWidth,
+          width: isMobile ? EXPANDED_DRAWER_WIDTH : drawerWidth,
           flexShrink: 0,
+          transition: "width 0.2s ease",
           "& .MuiDrawer-paper": {
-            width: drawerWidth,
-            bgcolor: "#1E293B",
+            width: isMobile ? EXPANDED_DRAWER_WIDTH : drawerWidth,
+            bgcolor: theme.palette.sidebar.background,
             color: "#FFFFFF",
             borderRight: 0,
             boxShadow: "4px 0 18px rgba(0,0,0,.08)",
-
+            overflowX: "hidden",
+            transition: "width 0.2s ease",
           },
         }}
       >
         <Toolbar />
 
-        {/* Brand Header */}
-        <Box sx={{ px: 3, py: 2, width: "100%" }}>
-          <Typography variant="h5" fontWeight={700}>
-            Freight Contract Management
-          </Typography>
+        {/* Brand Header + Collapse Toggle */}
+        <Box
+          sx={{
+            px: isSidebarCollapsed ? 1.5 : 3,
+            py: 2,
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isSidebarCollapsed ? "center" : "space-between",
+          }}
+        >
+          {!isSidebarCollapsed && (
+            <Typography variant="h5" fontWeight={700} noWrap sx={{ fontSize: "1.15rem" }}>
+              Freight Contract Management
+            </Typography>
+          )}
 
+          {!isMobile && (
+            <Tooltip title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+              <IconButton
+                onClick={handleSidebarToggle}
+                size="small"
+                sx={{ color: theme.palette.sidebar.textMuted, "&:hover": { color: "#FFFFFF", bgcolor: "rgba(255,255,255,.08)" } }}
+              >
+                {isSidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         <Divider sx={{ borderColor: "rgba(255,255,255,.08)" }} />
 
         {/* Navigation List Links */}
-        <List sx={{ px: 2, mt: 2 }}>
+        <List sx={{ px: isSidebarCollapsed ? 1 : 2, mt: 2 }}>
           {navigationItems.map((item) => {
             const active = location.pathname.startsWith(item.path);
 
-            return (
+            const listItemButton = (
               <ListItemButton
                 key={item.path}
-                onClick={() => navigate(item.path)}
-
+                onClick={() => {
+                  navigate(item.path);
+                  if (isMobile) setMobileDrawerOpen(false);
+                }}
                 selected={active}
                 sx={{
                   borderRadius: 2,
                   mb: 1,
-                  color: active ? "#FFFFFF" : "#CBD5E1",
-                  bgcolor: active ? "#2563EB" : "transparent",
+                  justifyContent: isSidebarCollapsed ? "center" : "flex-start",
+                  color: active ? "#FFFFFF" : theme.palette.sidebar.textMuted,
+                  bgcolor: active ? theme.palette.sidebar.activeItem : "transparent",
                   "&:hover": {
-                    bgcolor: "#2563EB",
+                    bgcolor: theme.palette.sidebar.activeItem,
                     color: "#FFFFFF",
                   },
                   "&.Mui-selected": {
-                    bgcolor: "#2563EB",
+                    bgcolor: theme.palette.sidebar.activeItem,
                     "&:hover": {
-                      bgcolor: "#2563EB",
-
+                      bgcolor: theme.palette.sidebar.activeItem,
                     },
                   },
                 }}
@@ -266,23 +382,32 @@ const DashboardLayout = () => {
                 <ListItemIcon
                   sx={{
                     color: "inherit",
-                    minWidth: 40,
-
+                    minWidth: isSidebarCollapsed ? 0 : 40,
+                    justifyContent: "center",
                   }}
                 >
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  sx={{
-                    "& .MuiListItemText-primary": {
-                      fontWeight: active ? 600 : 500,
-                    },
-                  }}
-                />
+                {!isSidebarCollapsed && (
+                  <ListItemText
+                    primary={item.label}
+                    sx={{
+                      "& .MuiListItemText-primary": {
+                        fontWeight: active ? 600 : 500,
+                      },
+                    }}
+                  />
+                )}
               </ListItemButton>
             );
 
+            return isSidebarCollapsed ? (
+              <Tooltip key={item.path} title={item.label} placement="right">
+                {listItemButton}
+              </Tooltip>
+            ) : (
+              <React.Fragment key={item.path}>{listItemButton}</React.Fragment>
+            );
           })}
         </List>
       </Drawer>
@@ -292,16 +417,27 @@ const DashboardLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          ml: `${drawerWidth}px`,
+          // Bug fix (task item 21): the permanent Drawer right above this
+          // Box is already a normal flex child (flexShrink: 0, width:
+          // drawerWidth) in this Box's parent flex row, so it already
+          // reserves drawerWidth of horizontal space and pushes this Box
+          // over correctly on its own. Adding `ml: drawerWidth` here on
+          // top of that double-counted the sidebar width, leaving a large
+          // empty gap before the page content - most visible on
+          // laptop-size screens. The AppBar's own ml/width above is
+          // unaffected by this fix since it's `position: fixed` and
+          // isn't part of this flex layout at all.
           mt: "75px",
-          p: 3,
-          minHeight: "100vh",
-          maxWidth: "1800px",
-          mx: "auto",
+          p: { xs: 2, sm: 3 },
+          minHeight: "calc(100vh - 75px)",
+          minWidth: 0,
+          overflowX: "auto",
+          transition: "margin-left 0.2s ease",
         }}
       >
-        <Outlet />
-
+        <Box sx={{ maxWidth: "1800px", mx: "auto" }}>
+          <Outlet />
+        </Box>
       </Box>
     </Box>
   );

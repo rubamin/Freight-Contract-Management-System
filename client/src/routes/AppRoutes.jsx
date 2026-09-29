@@ -22,7 +22,14 @@ import PublicRoute from "./PublicRoute";
 
 // Auth
 import Login from "../pages/Auth/Login";
+import ForgotPassword from "../pages/Auth/ForgotPassword";
+import ResetPassword from "../pages/Auth/ResetPassword";
 
+// Dashboard
+import Dashboard from "../pages/Dashboard/Dashboard";
+
+// Reports
+import Reports from "../pages/Reports/Reports";
 
 // Vendor
 import VendorList from "../pages/vendor/VendorList";
@@ -32,7 +39,8 @@ import ViewVendor from "../pages/vendor/ViewVendor";
 
 // Masters
 import ModuleList from "../pages/modules/ModuleList";
-
+import ModuleForm from "../pages/modules/ModuleForm";
+import { moduleConfigs } from "../constants/moduleConfigs";
 
 // Contracts
 import ContractList from "../pages/Contracts/ContractList";
@@ -43,10 +51,19 @@ import EditContract from "../pages/Contracts/EditContract";
 // Invoice
 import InvoiceList from "../pages/Invoices/InvoiceList";
 import AddInvoice from "../pages/Invoices/AddInvoice";
+import EditInvoice from "../pages/Invoices/EditInvoice";
 
 // Settings (Added AdminSetting import from pages folder)
 import AdminSettings from "../pages/Setting/AdminSettings";
+import AccessRequestsList from "../pages/Setting/AccessRequestsList";
+import UserSettings from "../pages/Setting/UserSettings";
 
+// Users (User Master, task item 4)
+import UserList from "../pages/Users/UserList";
+import UserForm from "../pages/Users/UserForm";
+
+// Profile
+import Profile from "../pages/Profile/Profile";
 
 const PageLoader = () => (
   <Box
@@ -88,8 +105,7 @@ const NotFound = () => (
 
       <Button
         variant="contained"
-        onClick={() => (window.location.href = "/vendors")}
-
+        onClick={() => (window.location.href = "/dashboard")}
       >
         Go to Dashboard
       </Button>
@@ -104,8 +120,7 @@ const AppRoutes = () => {
         <Routes>
           <Route
             path="/"
-            element={<Navigate to="/vendors" replace />}
-
+            element={<Navigate to="/dashboard" replace />}
           />
 
           <Route element={<PublicRoute />}>
@@ -114,12 +129,24 @@ const AppRoutes = () => {
                 path="/login"
                 element={<Login />}
               />
-
+              <Route
+                path="/forgot-password"
+                element={<ForgotPassword />}
+              />
+              <Route
+                path="/reset-password"
+                element={<ResetPassword />}
+              />
             </Route>
           </Route>
 
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
+              {/* Dashboard */}
+              <Route path="/dashboard" element={<Dashboard />} />
+
+              {/* Reports */}
+              <Route path="/reports" element={<Reports />} />
 
               {/* Vendor */}
               <Route path="/vendors" element={<VendorList />} />
@@ -129,31 +156,55 @@ const AppRoutes = () => {
 
               {/* Masters */}
               <Route
-                path="/masters/plants"
-                element={<ModuleList configKey="plants" />}
-              />
-
-              <Route
                 path="/masters/vehicle-types"
                 element={<ModuleList configKey="vehicleTypes" />}
               />
-
+              <Route
+                path="/masters/vehicle-types/add"
+                element={<ModuleForm configKey="vehicleTypes" config={moduleConfigs.vehicleTypes} />}
+              />
+              <Route
+                path="/masters/vehicle-types/edit/:id"
+                element={<ModuleForm configKey="vehicleTypes" config={moduleConfigs.vehicleTypes} />}
+              />
 
               <Route
                 path="/masters/weights"
                 element={<ModuleList configKey="weights" />}
               />
-
+              <Route
+                path="/masters/weights/add"
+                element={<ModuleForm configKey="weights" config={moduleConfigs.weights} />}
+              />
+              <Route
+                path="/masters/weights/edit/:id"
+                element={<ModuleForm configKey="weights" config={moduleConfigs.weights} />}
+              />
 
               <Route
                 path="/masters/destinations"
                 element={<ModuleList configKey="destinations" />}
               />
+              <Route
+                path="/masters/destinations/add"
+                element={<ModuleForm configKey="destinations" config={moduleConfigs.destinations} />}
+              />
+              <Route
+                path="/masters/destinations/edit/:id"
+                element={<ModuleForm configKey="destinations" config={moduleConfigs.destinations} />}
+              />
 
               <Route
-                path="/masters/statuses"
-                element={<ModuleList configKey="statuses" />}
-
+                path="/masters/customers"
+                element={<ModuleList configKey="customers" />}
+              />
+              <Route
+                path="/masters/customers/add"
+                element={<ModuleForm configKey="customers" config={moduleConfigs.customers} />}
+              />
+              <Route
+                path="/masters/customers/edit/:id"
+                element={<ModuleForm configKey="customers" config={moduleConfigs.customers} />}
               />
 
               {/* Contracts */}
@@ -188,6 +239,10 @@ const AppRoutes = () => {
                 element={<AddInvoice />}
               />
 
+              <Route
+                path="/invoices/edit"
+                element={<EditInvoice />}
+              />
 
               {/* Admin Settings Route */}
               <Route
@@ -195,6 +250,27 @@ const AppRoutes = () => {
                 element={<AdminSettings />}
               />
 
+              {/* Access Requests queue (task item 19/20) */}
+              <Route
+                path="/admin/access-requests"
+                element={<AccessRequestsList />}
+              />
+
+              {/* User Master (task item 4) */}
+              <Route path="/admin/users" element={<UserList />} />
+              <Route path="/admin/users/add" element={<UserForm />} />
+              <Route path="/admin/users/edit/:id" element={<UserForm />} />
+
+              {/* Personal Profile & Settings Routes */}
+              <Route
+                path="/profile"
+                element={<Profile />}
+              />
+
+              <Route
+                path="/settings/preferences"
+                element={<UserSettings />}
+              />
 
               {/* Workflow */}
               <Route

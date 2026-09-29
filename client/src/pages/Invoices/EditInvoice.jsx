@@ -298,23 +298,9 @@ export default function EditInvoice() {
         }));
     };
 
-    // Returns the GST numbers belonging to a single vendor only (VendorGST.VendorID
-    // match), so each row's GST dropdown never lists another vendor's GST numbers.
-    // With no vendor selected yet, no options are offered.
-    const getVendorGstOptions = (vendorId) => {
-        if (!vendorId) return [];
-        return masterReferences.vendorGsts
-            .filter(v => Number(v.VendorID) === Number(vendorId))
-            .map(v => v.GSTNumber)
-            .filter(Boolean);
-    };
-
-    const handleGstSelect = (id, gstValue, vendorId) => {
+    const handleGstSelect = (id, gstValue) => {
         const cleanGst = (gstValue || '').toUpperCase().trim();
-        const candidateGsts = vendorId
-            ? masterReferences.vendorGsts.filter(v => Number(v.VendorID) === Number(vendorId))
-            : masterReferences.vendorGsts;
-        const foundRecord = candidateGsts.find(v => (v.GSTNumber || '').toUpperCase() === cleanGst);
+        const foundRecord = masterReferences.vendorGsts.find(v => (v.GSTNumber || '').toUpperCase() === cleanGst);
         const matchedVendor = foundRecord
             ? masterReferences.vendors.find(v => Number(v.VendorID) === Number(foundRecord.VendorID))
             : null;
@@ -346,8 +332,8 @@ export default function EditInvoice() {
                 ...row,
                 vendorId,
                 vendorName,
-                gstNo: defaultGst ? (defaultGst.GSTNumber || '').toUpperCase().trim() : '',
-                vendorGstId: defaultGst ? defaultGst.VendorGSTID : null
+                gstNo: defaultGst ? (defaultGst.GSTNumber || '').toUpperCase().trim() : row.gstNo,
+                vendorGstId: defaultGst ? defaultGst.VendorGSTID : row.vendorGstId
             };
         }));
     };
@@ -474,14 +460,6 @@ export default function EditInvoice() {
         );
     };
 
-    // Customer Name is only mandatory on a row once that row carries a
-    // Detain Charge or Extra Charge - otherwise it stays optional.
-    const isCustomerNameMissing = (row) => {
-        const detain = parseFloat(row.detainCharge) || 0;
-        const extra = parseFloat(row.extraCharge) || 0;
-        return (detain > 0 || extra > 0) && !row.customerName?.trim();
-    };
-
     // --- SAVE ALL EDITED ROWS IN ONE BULK REQUEST ---
     const handleSaveChanges = async () => {
                if (rows.length === 0) {
@@ -493,13 +471,6 @@ export default function EditInvoice() {
         const missingVehicleTypeRow = rows.find(r => !r.vehicleType || !r.vehicleType.trim());
         if (missingVehicleTypeRow) {
             setSnackbar({ open: true, message: 'Vehicle Type is required for every invoice row.', severity: 'error' });
-            return;
-        }
-
-        // Customer Name is mandatory only when Detain Chg or Extra Chg is present on that row.
-        const missingCustomerNameRow = rows.find(isCustomerNameMissing);
-        if (missingCustomerNameRow) {
-            setSnackbar({ open: true, message: 'Customer Name is required for any row with a Detain Charge or Extra Charge.', severity: 'error' });
             return;
         }
 
@@ -644,17 +615,17 @@ export default function EditInvoice() {
                                             <TableCell sx={{ minWidth: 130 }}>Location</TableCell>
                                             <TableCell sx={{ minWidth: 200 }}>Vendor Name *</TableCell>
                                             <TableCell sx={{ minWidth: 170 }}>GST NO * (VendorGST Master)</TableCell>
+                                            <TableCell sx={{ minWidth: 200 }}>Customer Name *</TableCell>
                                             <TableCell sx={{ minWidth: 150 }}>Invoice / Bill No *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>Invoice Date *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>LR Date *</TableCell>
                                             <TableCell sx={{ minWidth: 130 }}>LR NO *</TableCell>
-                                            <TableCell sx={{ minWidth: 160 }}>Vehicle Type *</TableCell>
+                                            <TableCell sx={{ minWidth: 160 }}>Vehicle Type </TableCell>
                                             <TableCell sx={{ minWidth: 140 }}>To *</TableCell>
-                                            <TableCell sx={{ minWidth: 130, textAlign: 'right' }}>Freight Chargeable Wt (MT/KG)</TableCell>
+                                            <TableCell sx={{ minWidth: 130, textAlign: 'right' }}>Actual Wt (MT/KG)*</TableCell>
                                             <TableCell sx={{ minWidth: 120, textAlign: 'right' }}>Freight Chg</TableCell>
                                             <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Detain Chg</TableCell>
                                             <TableCell sx={{ minWidth: 110, textAlign: 'right' }}>Extra Chg</TableCell>
-                                            <TableCell sx={{ minWidth: 200 }}>Customer Name</TableCell>
                                             <TableCell sx={{ minWidth: 120, textAlign: 'right', backgroundColor: '#e6f4ea !important', color: '#137333 !important' }}>Total</TableCell>
                                             <TableCell sx={{ minWidth: 180 }}>Remarks</TableCell>
                                             <TableCell sx={{ minWidth: 90, textAlign: 'center' }}>Pre-Appr</TableCell>
@@ -717,9 +688,19 @@ export default function EditInvoice() {
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'gstNo' })}>
                                                     <EditableAutocompleteCell
                                                         value={row.gstNo}
-                                                        options={getVendorGstOptions(row.vendorId)}
+                                                        options={masterReferences.vendorGsts.map(v => v.GSTNumber).filter(Boolean)}
                                                         placeholder="Type/Select GST..."
-                                                        onChange={(val) => handleGstSelect(row.id, val, row.vendorId)}
+                                                        onChange={(val) => handleGstSelect(row.id, val)}
+                                                    />
+                                                </TableCell>
+
+                                                {/* Customer Name Autocomplete */}
+                                                <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'customerName' })}>
+                                                    <EditableAutocompleteCell
+                                                        value={row.customerName}
+                                                        options={masterReferences.customers}
+                                                        placeholder="Customer Name..."
+                                                        onChange={(val) => handleCellChange(row.id, 'customerName', val)}
                                                     />
                                                 </TableCell>
 
@@ -786,25 +767,6 @@ export default function EditInvoice() {
                                                 </TableCell>
                                                 <TableCell onClick={() => setSelectedCell({ rowId: row.id, field: 'extraCharge' })}>
                                                     <TextField type="number" value={row.extraCharge} onChange={(e) => handleCellChange(row.id, 'extraCharge', e.target.value)} placeholder="0" size="small" fullWidth variant="standard" slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { padding: '6px 8px', fontSize: '0.82rem', textAlign: 'right' } } }} />
-                                                </TableCell>
-
-                                                {/* Customer Name Autocomplete — only mandatory when this row
-                                                    carries a Detain Charge or Extra Charge. */}
-                                                <TableCell
-                                                    onClick={() => setSelectedCell({ rowId: row.id, field: 'customerName' })}
-                                                    sx={isCustomerNameMissing(row) ? { outline: '1px solid #d32f2f', outlineOffset: '-1px' } : undefined}
-                                                >
-                                                    <EditableAutocompleteCell
-                                                        value={row.customerName}
-                                                        options={masterReferences.customers}
-                                                        placeholder="Customer Name..."
-                                                        onChange={(val) => handleCellChange(row.id, 'customerName', val)}
-                                                    />
-                                                    {isCustomerNameMissing(row) && (
-                                                        <Typography component="span" sx={{ color: '#d32f2f', fontSize: '0.7rem', pl: 1 }}>
-                                                            * required (Detain/Extra Chg present)
-                                                        </Typography>
-                                                    )}
                                                 </TableCell>
 
                                                 <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: '#137333', backgroundColor: '#f4fbf7 !important' }}>

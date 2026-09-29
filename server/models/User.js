@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
-
+const { literal } = require("sequelize");
 
 const User = sequelize.define(
   "User",
@@ -42,6 +42,10 @@ const User = sequelize.define(
       allowNull: true,
     },
 
+    ProfilePhotoUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+    },
 
     IsActive: {
       type: DataTypes.BOOLEAN,
@@ -55,8 +59,17 @@ const User = sequelize.define(
 
     CreatedAt: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+      defaultValue: literal("GETDATE()"),
+    },
 
+    PasswordResetTokenHash: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    PasswordResetExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   },
   {
@@ -66,4 +79,3 @@ const User = sequelize.define(
 );
 
 module.exports = User;
-

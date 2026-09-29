@@ -23,7 +23,7 @@ import axios from "axios";
 
 import { fetchVendors, removeVendor } from "../../redux/slices/vendorSlice";
 import useDebounce from "../../hooks/useDebounce";
-
+import usePermissions from "../../hooks/usePermissions";
 
 /* Common Shared UI Components */
 import LoadingOverlay from "../../components/common/LoadingOverlay";
@@ -46,7 +46,7 @@ const VendorList = () => {
 
   const { vendors, loading, totalRecords } = useSelector((state) => state.vendor);
   const { token } = useSelector((state) => state.auth);
-
+  const { canEdit, loaded: permissionsLoaded } = usePermissions();
 
   /* Live Search Configuration States */
   const [search, setSearch] = useState("");
@@ -319,7 +319,7 @@ const VendorList = () => {
             color="warning"
             size="small"
             onClick={() => navigate(`/vendors/edit/${params.row.VendorID}`)}
-
+            sx={{ display: permissionsLoaded && canEdit("vendors") ? "inline-flex" : "none" }}
           >
             <Edit fontSize="small" />
           </IconButton>
@@ -352,8 +352,7 @@ const VendorList = () => {
           title="Vendor Master"
           subtitle="Manage all vendor records from a single place."
           breadcrumbs={[
-            { label: "Dashboard", path: "/" },
-
+            { label: "Dashboard", path: "/dashboard" },
             { label: "Master" },
             { label: "Vendor" },
           ]}
@@ -419,26 +418,6 @@ const VendorList = () => {
       <FilterPanel open={showFilters} onApply={() => {}} onReset={() => {}}>
         {/* Future Filters layout settings inside here */}
       </FilterPanel>
-
-      {/* Table grid listing operations toolbar module context row */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 2, mb: 1 }}>
-        <TableToolbar
-          title="Vendor List"
-          totalRecords={totalRecords}
-          onRefresh={() =>
-            dispatch(
-              fetchVendors({
-                page: page + 1,
-                pageSize,
-                search: debouncedSearch,
-                sortField: sortModel[0]?.field || "VendorID",
-                sortOrder: sortModel[0]?.sort?.toUpperCase() || "DESC",
-              })
-            )
-          }
-        />
-      </Box>
-
 
       {/* Master Content Data Table Display Card component using CustomDataGrid */}
       <PageCard

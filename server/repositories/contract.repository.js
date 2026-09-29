@@ -6,8 +6,8 @@ const {
   ContractRateMatrix,
   DestinationMaster,
   VehicleType,
-  WeightMaster
-
+  WeightMaster,
+  sequelize
 } = require("../models");
 
 // Updated contractInclude with nested rateMatrix associations
@@ -78,9 +78,11 @@ const getContractById = async (contractId, transaction = null) => {
   });
 };
 
-const getContractByNumber = async (contractNo, excludeContractId = null) => {
-  const where = { ContractNo: contractNo };
-
+// Bug fix (task item 4): ContractNo only needs to be unique per vendor, not
+// globally, so this now always scopes the lookup by VendorID too - matching
+// the composite unique index on ContractMaster (VendorID, ContractNo).
+const getContractByNumber = async (contractNo, vendorId, excludeContractId = null) => {
+  const where = { ContractNo: contractNo, VendorID: vendorId };
 
   if (excludeContractId) {
     where.ContractID = { [Op.ne]: excludeContractId };
@@ -153,31 +155,70 @@ const getVendorById = async (vendorId) => {
 
 // 3. Automated Check-or-Create Methods for Excel Import Processing Flow
 const findOrCreateVehicleType = async ({ VehicleName, Capacity, Unit }, transaction = null) => {
-  const [vehicleType] = await VehicleType.findOrCreate({
-    where: { VehicleName },
-    defaults: { Capacity, Unit },
-    transaction
-  });
-  return vehicleType;
+  const execute = async (t) => {
+    const existing = await VehicleType.findOne({ where: { VehicleName }, transaction: t });
+    if (existing) return existing;
+
+    return await VehicleType.create(
+      { VehicleName, Capacity, Unit },
+      { transaction: t }
+    );
+  };
+
+  if (transaction) {
+    return execute(transaction);
+  }
+
+  return await sequelize.transaction(execute);
 };
 
-const findOrCreateDestination = async ({ City, District, State, Pincode }, transaction = null) => {
-  const [destination] = await DestinationMaster.findOrCreate({
-    where: { City, State: State || "Gujarat" },
-    defaults: { District: District || "", Pincode: Pincode || "" },
-    transaction
-  });
-  return destination;
+// Used by the Excel rate-matrix import path (task item 7: Pincode removed
+// entirely; District auto-fills via DestinationMaster's beforeValidate
+// hook, so it isn't set here directly).
+const findOrCreateDestination = async ({ City, State }, transaction = null) => {
+  const execute = async (t) => {
+    const normalizedState = State || "Gujarat";
+    const existing = await DestinationMaster.findOne({
+      where: { City, State: normalizedState },
+      transaction: t,
+    });
+    if (existing) return existing;
+
+    return await DestinationMaster.create(
+      { City, State: normalizedState },
+      { transaction: t }
+    );
+  };
+
+  if (transaction) {
+    return execute(transaction);
+  }
+
+  return await sequelize.transaction(execute);
 };
 
-const findOrCreateWeight = async ({ FromWeight, ToWeight, WeightUnit }, transaction = null) => {
-  const [weight] = await WeightMaster.findOrCreate({
-    where: { FromWeight, WeightUnit: WeightUnit || "MT" },
-    defaults: { ToWeight: ToWeight || FromWeight },
-    transaction
-  });
-  return weight;
+// Simplified from a FromWeight/ToWeight range to a single Weight value
+// (task item 9).
+const findOrCreateWeight = async ({ Weight, WeightUnit }, transaction = null) => {
+  const execute = async (t) => {
+    const normalizedUnit = WeightUnit || "MT";
+    const existing = await WeightMaster.findOne({
+      where: { Weight, WeightUnit: normalizedUnit },
+      transaction: t,
+    });
+    if (existing) return existing;
 
+    return await WeightMaster.create(
+      { Weight, WeightUnit: normalizedUnit },
+      { transaction: t }
+    );
+  };
+
+  if (transaction) {
+    return execute(transaction);
+  }
+
+  return await sequelize.transaction(execute);
 };
 
 // 4. Rate Matrix Insertion and Cleanup Methods
@@ -235,4 +276,3 @@ module.exports = {
   getRateMatrixByContractId,
   updateRateMatrixEntry,
 };
-

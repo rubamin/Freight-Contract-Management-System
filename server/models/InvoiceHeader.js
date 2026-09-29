@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
-
+const { literal } = require("sequelize");
 
 const InvoiceHeader = sequelize.define(
   "InvoiceHeader",
@@ -14,7 +14,10 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.STRING(100),
       allowNull: false,
     },
-
+    CustomerName: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
     InvoiceDate: {
       type: DataTypes.DATEONLY,
       allowNull: false,
@@ -31,7 +34,24 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-
+    // Real FK to PlantLocations - the Location the user actually selects on
+    // the Add Invoice page's Step 1 hierarchy (Company -> SBU -> Plant ->
+    // Location). Previously there was no column for this at all, so only
+    // PlantID (a different, unrelated master table) was ever stored, and
+    // LocationName below had no reliable source to be derived from.
+    LocationID: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    LocationName: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+    },
+    IsPreApproved: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     ContractID: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -44,11 +64,6 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: true,
     },
-    VehicleNumber: {
-      type: DataTypes.STRING(30),
-      allowNull: true,
-    },
-
     VehicleTypeID: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -97,8 +112,7 @@ const InvoiceHeader = sequelize.define(
     },
     UploadedDate: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-
+      defaultValue: literal("GETDATE()"),
     },
     FromStation: {
       type: DataTypes.STRING(100),
@@ -112,8 +126,7 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.STRING(DataTypes.MAX),
       allowNull: true,
     },
-    // --- નવા ઉમેરેલા ડોક્યુમેન્ટ પાથ ફિલ્ડ્સ ---
-
+    // --- Newly added document path fields ---
     Doc1Path: {
       type: DataTypes.STRING(255),
       allowNull: true,

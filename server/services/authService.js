@@ -1,24 +1,14 @@
-const { User, Role } = require("../models");
-const { comparePassword } = require("../helpers/bcrpt");
+const { User, Role, sequelize } = require("../models");
+const { comparePassword, hashPassword } = require("../helpers/bcrpt");
 const { generateToken } = require("../helpers/jwt");
-
-const sanitizeUser = (user) => ({
-  UserID: user.UserID,
-  RoleID: user.RoleID,
-  FullName: user.FullName,
-  Email: user.Email,
-  MobileNo: user.MobileNo,
-  IsActive: user.IsActive,
-  LastLogin: user.LastLogin,
-  role: user.role,
-});
+const { sanitizeUser } = require("../utils/userSanitizer");
+const { generateResetToken, hashResetToken } = require("../helpers/passwordReset");
+const { sendPasswordResetEmail } = require("./mailer.service");
+const {
+  PASSWORD_RESET_INVALID_TOKEN_MESSAGE,
+} = require("../constants/messages");
 
 const login = async ({ Email, Password }) => {
-  console.log("========== LOGIN ==========");
-  console.log("Email :", Email);
-  console.log("Password :", Password);
-
-
   const user = await User.findOne({
     where: {
       Email,
@@ -32,16 +22,7 @@ const login = async ({ Email, Password }) => {
     ],
   });
 
-  console.log("User Found :", !!user);
-
-  if (user) {
-    console.log("DB Email :", user.Email);
-    console.log("DB Hash :", user.PasswordHash);
-  }
-
   if (!user || !user.PasswordHash) {
-    console.log("❌ User not found or PasswordHash missing");
-
     throw new Error("Invalid email or password.");
   }
 
@@ -50,26 +31,20 @@ const login = async ({ Email, Password }) => {
     user.PasswordHash
   );
 
-  console.log("Password Match :", isValidPassword);
-
   if (!isValidPassword) {
-    console.log("❌ Password mismatch");
     throw new Error("Invalid email or password.");
   }
 
-  // await user.update({
-  //   LastLogin: new Date(),
-  // });
-console.log("Skipping LastLogin update...");
+  // Use sequelize.literal('GETDATE()') for SQL Server to prevent string-to-datetime conversion errors
+  await user.update({
+    LastLogin: sequelize.literal("GETDATE()"),
+  });
 
   const token = generateToken({
     UserID: user.UserID,
     RoleID: user.RoleID,
     Email: user.Email,
   });
-
-  console.log("✅ Login Successful");
-
 
   return {
     token,
@@ -94,8 +69,64 @@ const getProfile = async (userId) => {
   return sanitizeUser(user);
 };
 
+const forgotPassword = async ({ Email }, { buildResetLink }) => {
+  const user = await User.findOne({
+    where: {
+      Email,
+      IsActive: true,
+    },
+  });
+
+  if (!user) {
+    return;
+  }
+
+  const { rawToken, tokenHash, expiresAt } = generateResetToken();
+
+  await user.update({
+    PasswordResetTokenHash: tokenHash,
+    PasswordResetExpiresAt: expiresAt,
+  });
+
+  const resetLink = buildResetLink(rawToken);
+
+  try {
+    await sendPasswordResetEmail(user.Email, resetLink);
+  } catch (error) {
+    console.error("Failed to send password reset email:", error.message);
+    throw new Error("Unable to send the password reset email.");
+  }
+};
+
+const resetPassword = async ({ token, newPassword }) => {
+  const tokenHash = hashResetToken(token);
+
+  const user = await User.findOne({
+    where: {
+      PasswordResetTokenHash: tokenHash,
+    },
+  });
+
+  if (
+    !user ||
+    !user.PasswordResetExpiresAt ||
+    new Date(user.PasswordResetExpiresAt).getTime() < Date.now()
+  ) {
+    throw new Error(PASSWORD_RESET_INVALID_TOKEN_MESSAGE);
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await user.update({
+    PasswordHash: passwordHash,
+    PasswordResetTokenHash: null,
+    PasswordResetExpiresAt: null,
+  });
+};
+
 module.exports = {
   login,
   getProfile,
-
+  forgotPassword,
+  resetPassword,
 };

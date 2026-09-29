@@ -77,10 +77,14 @@ const EditVendor = () => {
           IsActive: vendor.IsActive,
         });
 
-        // Map existing GST numbers properly to match object format expected by table/form
+        // Map existing GST numbers properly to match object format expected by table/form.
+        // VendorGSTID is preserved here (bug fix - task item 3) so the backend can
+        // update these rows in place on save instead of delete-and-recreate, which
+        // used to fail with a FK conflict for any GST row already referenced by an
+        // invoice.
         if (vendor.gstNumbers && vendor.gstNumbers.length > 0) {
           const formattedGst = vendor.gstNumbers.map((item) => ({
-
+            VendorGSTID: item.VendorGSTID || null,
             GSTNumber: item.GSTNumber || item || "",
             StateName: item.StateName || "",
             IsDefault: item.IsDefault || false,
@@ -186,8 +190,7 @@ const EditVendor = () => {
         <PageHeader
           title="Edit Vendor"
           breadcrumbs={[
-            { label: "Dashboard", path: "/" },
-
+            { label: "Dashboard", path: "/dashboard" },
             { label: "Vendor", path: "/vendors" },
             { label: "Edit" },
           ]}

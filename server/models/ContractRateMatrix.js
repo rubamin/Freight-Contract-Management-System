@@ -25,7 +25,6 @@ const ContractRateMatrix = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
-
     BaseRate: {
       type: DataTypes.DECIMAL(18, 2),
       allowNull: false,

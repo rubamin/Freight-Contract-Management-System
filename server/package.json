@@ -26,7 +26,7 @@
     "mssql": "^12.7.0",
     "multer": "^2.2.0",
     "nodemailer": "^9.0.3",
-
+    "pdfkit": "^0.20.1",
     "sequelize": "^6.37.8",
     "tedious": "^20.0.0",
     "xlsx": "^0.18.5"

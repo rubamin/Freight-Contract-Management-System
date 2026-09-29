@@ -6,9 +6,9 @@ import {
   Paper,
   TextField,
   InputAdornment,
+  Button,
 } from "@mui/material";
-import { Delete, Search } from "@mui/icons-material";
-
+import { Delete, Edit, Search, ToggleOff, CloudUpload } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -16,9 +16,11 @@ import PageHeader from "../../components/common/PageHeader";
 import DeleteDialog from "../../components/common/DeleteDialog";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 import AppSnackbar from "../../components/common/AppSnackbar";
+import BulkUploadModal from "../../components/common/BulkUploadModal";
 import useDebounce from "../../hooks/useDebounce";
+import usePermissions from "../../hooks/usePermissions";
 import { moduleConfigs } from "../../constants/moduleConfigs";
-
+import * as moduleService from "../../services/moduleService";
 import {
   fetchModuleRecords,
   removeModuleRecord,
@@ -26,7 +28,7 @@ import {
 
 const ModuleList = ({ configKey }) => {
   const config = moduleConfigs[configKey];
-
+  const { canEdit, loaded: permissionsLoaded } = usePermissions();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { recordsByModule, totalRecordsByModule, loading, error } =
@@ -37,7 +39,10 @@ const ModuleList = ({ configKey }) => {
   const [pageSize, setPageSize] = useState(10);
   const [selectedRecordId, setSelectedRecordId] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
-
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [bulkUploadFile, setBulkUploadFile] = useState(null);
+  const [bulkUploadMessage, setBulkUploadMessage] = useState(null);
+  const [bulkUploadProcessing, setBulkUploadProcessing] = useState(false);
 
   const debouncedSearch = useDebounce(search, 500);
   const stateKey = config.stateKey || config.moduleName;
@@ -82,29 +87,60 @@ const ModuleList = ({ configKey }) => {
       },
     }));
 
-    return [
-      {
-        field: "Action",
-        headerName: "Action",
-        width: 90,
-        sortable: false,
-        renderCell: (params) => (
+    // Table column order standard (task item 8): Sr. No. first, data
+    // columns in the middle, Action always last. Sr. No. is a simple
+    // page-relative row index (page * pageSize + row position), not the
+    // record's DB primary key, since that's what "Sr. No." conventionally
+    // means in this app's master lists.
+    const srNoColumn = {
+      field: "srNo",
+      headerName: "Sr. No.",
+      width: 90,
+      sortable: false,
+      renderCell: (params) => {
+        const rowIndex = rows.findIndex((r) => r[config.idField] === params.row[config.idField]);
+        return page * pageSize + rowIndex + 1;
+      },
+    };
+
+    const actionColumn = {
+      field: "Action",
+      headerName: "Action",
+      width: 110,
+      sortable: false,
+      renderCell: (params) => (
+        <>
+          {/* Bug fix (task item 17): Edit is hidden, not just
+              backend-blocked, when the user lacks Edit permission for
+              this module. Withheld entirely (not shown-then-disabled)
+              until permissions have loaded, to avoid a flash of the
+              button before it's hidden. */}
+          {config.editPath && permissionsLoaded && canEdit(config.moduleName) && (
+            <IconButton
+              color="primary"
+              onClick={() => navigate(`${config.editPath}/${params.row[config.idField]}`)}
+            >
+              <Edit fontSize="small" />
+            </IconButton>
+          )}
           <IconButton
             color="error"
-
+            // Masters with softDeleteOnly show a deactivate icon instead of
+            // a trash icon, since the action flips IsActive rather than
+            // permanently removing the record (task item 4/7).
             onClick={() => {
               setSelectedRecordId(params.row[config.idField]);
               setDeleteDialog(true);
             }}
           >
-            <Delete />
+            {config.softDeleteOnly ? <ToggleOff fontSize="small" /> : <Delete fontSize="small" />}
           </IconButton>
-        ),
-      },
-      ...dataColumns,
-    ];
-  }, [config]);
+        </>
+      ),
+    };
 
+    return [srNoColumn, ...dataColumns, actionColumn];
+  }, [config, navigate, rows, page, pageSize, permissionsLoaded, canEdit]);
 
   const handleDeleteConfirm = async () => {
     const result = await dispatch(
@@ -120,6 +156,45 @@ const ModuleList = ({ configKey }) => {
     }
   };
 
+  // Bulk Excel upload (task item 11) - only shown for modules whose config
+  // opts in via bulkUploadFields (never Contract Master or Invoices).
+  const handleDownloadTemplate = () => {
+    const headerRow = config.bulkUploadFields.join(",");
+    const blob = new Blob([`${headerRow}\n`], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${config.moduleName}-template.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkFileSelect = (e) => {
+    setBulkUploadFile(e.target.files[0] || null);
+    setBulkUploadMessage(null);
+  };
+
+  const handleBulkUploadSubmit = async () => {
+    if (!bulkUploadFile) return;
+
+    setBulkUploadProcessing(true);
+    try {
+      const response = await moduleService.bulkUploadRecords({
+        apiGroup: config.apiGroup,
+        moduleName: config.moduleName,
+        file: bulkUploadFile,
+      });
+      setBulkUploadMessage({ type: "success", text: response.data.message });
+      loadRecords();
+    } catch (err) {
+      setBulkUploadMessage({
+        type: "error",
+        text: err.response?.data?.message || "Failed to process the uploaded file.",
+      });
+    } finally {
+      setBulkUploadProcessing(false);
+    }
+  };
 
   return (
     <Box p={3}>
@@ -128,8 +203,7 @@ const ModuleList = ({ configKey }) => {
         breadcrumbs={[
           {
             label: "Dashboard",
-            path: "/vendors",
-
+            path: "/dashboard",
           },
           {
             label: config.title,
@@ -141,8 +215,7 @@ const ModuleList = ({ configKey }) => {
         }
       />
 
-      <Paper sx={{ p: 2, mb: 2 }}>
-
+      <Paper sx={{ p: 2, mb: 2, display: "flex", gap: 2, alignItems: "center" }}>
         <TextField
           fullWidth
           size="small"
@@ -157,7 +230,16 @@ const ModuleList = ({ configKey }) => {
             ),
           }}
         />
-
+        {config.bulkUploadFields && (
+          <Button
+            variant="outlined"
+            startIcon={<CloudUpload />}
+            sx={{ whiteSpace: "nowrap" }}
+            onClick={() => setBulkUploadOpen(true)}
+          >
+            Bulk Upload
+          </Button>
+        )}
       </Paper>
 
       <Paper>
@@ -184,9 +266,12 @@ const ModuleList = ({ configKey }) => {
 
       <DeleteDialog
         open={deleteDialog}
-        title={`Delete ${config.title}`}
-        message="Are you sure you want to delete this record?"
-
+        title={config.softDeleteOnly ? `Deactivate ${config.title}` : `Delete ${config.title}`}
+        message={
+          config.softDeleteOnly
+            ? "Are you sure you want to deactivate this record? It will no longer appear as an option elsewhere, but historical records that reference it are unaffected."
+            : "Are you sure you want to delete this record?"
+        }
         onClose={() => setDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
       />
@@ -200,6 +285,23 @@ const ModuleList = ({ configKey }) => {
         onClose={() => {}}
       />
 
+      {config.bulkUploadFields && (
+        <BulkUploadModal
+          open={bulkUploadOpen}
+          onClose={() => {
+            setBulkUploadOpen(false);
+            setBulkUploadFile(null);
+            setBulkUploadMessage(null);
+          }}
+          title={`Bulk Upload ${config.title}`}
+          onDownloadTemplate={handleDownloadTemplate}
+          selectedFile={bulkUploadFile}
+          onFileSelect={handleBulkFileSelect}
+          uploadMessage={bulkUploadMessage}
+          uploadProcessing={bulkUploadProcessing}
+          onSubmit={handleBulkUploadSubmit}
+        />
+      )}
     </Box>
   );
 };

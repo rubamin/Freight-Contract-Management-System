@@ -12,10 +12,13 @@ const sequelize = new Sequelize(
       options: {
         encrypt: false,
         trustServerCertificate: true,
+        useUTC: false,
+        dateFirst: 1,
+        enableArithAbort: true,
       },
     },
+    timezone: "+00:00",
   }
 );
 
 module.exports = sequelize;
-

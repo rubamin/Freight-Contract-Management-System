@@ -96,9 +96,9 @@ const ViewContract = () => {
                 sheet1RawData
                   .map((row) => {
                     const w = row.weight || row.Weight;
-                    if (w && (w.FromWeight !== undefined || w.fromWeight !== undefined)) {
-                      return `${w.FromWeight !== undefined ? w.FromWeight : w.fromWeight} MT`.trim();
-
+                    if (w && (w.Weight !== undefined || w.weight !== undefined)) {
+                      const value = w.Weight !== undefined ? w.Weight : w.weight;
+                      return `${value} ${w.WeightUnit || "MT"}`.trim();
                     }
                     return row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate";
                   })
@@ -112,13 +112,12 @@ const ViewContract = () => {
               const cityName = destObj?.City || destObj?.city || `Destination ${row.DestinationID || row.destinationID || "N/A"}`;
               
               const w = row.weight || row.Weight;
-              const weightLabel = (w && (w.FromWeight !== undefined || w.fromWeight !== undefined)) 
-                ? `${w.FromWeight !== undefined ? w.FromWeight : w.fromWeight} MT`.trim() 
+              const weightLabel = (w && (w.Weight !== undefined || w.weight !== undefined)) 
+                ? `${w.Weight !== undefined ? w.Weight : w.weight} ${w.WeightUnit || "MT"}`.trim() 
                 : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
 
               if (!cityMap[cityName]) {
                 cityMap[cityName] = { cityName, rates: {} };
-
               }
               cityMap[cityName].rates[weightLabel] = {
                 RateID: row.RateID !== undefined ? row.RateID : row.rateID,
@@ -308,7 +307,6 @@ const ViewContract = () => {
               >
                 <TableContainer component={Paper} sx={{ border: "1px solid #e0e0e0", maxHeight: 500, boxShadow: "none" }}>
                   <Table stickyHeader size="small" sx={{ minWidth: Math.max(700, sheet1Weights.length * 100 + 160) }}>
-
                     <TableHead>
                       <TableRow>
                         <TableCell 
@@ -325,7 +323,6 @@ const ViewContract = () => {
                         >
                           DESTINATION
                         </TableCell>
-
                         {sheet1Weights.map((weight) => (
                           <TableCell key={weight} align="center" sx={{ fontWeight: "bold", bgcolor: "#e2e8f0", minWidth: 100 }}>
                             {weight}
@@ -353,7 +350,6 @@ const ViewContract = () => {
                             >
                               {dest.cityName}
                             </TableCell>
-
                             {sheet1Weights.map((weight) => {
                               const cellData = dest.rates[weight] || {};
                               return (
@@ -367,7 +363,6 @@ const ViewContract = () => {
                       {filteredSheet1.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={sheet1Weights.length + 1} align="center">
-
                             No matching destination records found.
                           </TableCell>
                         </TableRow>

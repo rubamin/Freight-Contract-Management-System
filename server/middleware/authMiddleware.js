@@ -1,6 +1,5 @@
 const { verifyToken } = require("../helpers/jwt");
-const { User } = require("../models");
-
+const { User, Role } = require("../models");
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -16,8 +15,9 @@ const authMiddleware = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = verifyToken(token);
 
-    const user = await User.findByPk(decoded.UserID);
-
+    const user = await User.findByPk(decoded.UserID, {
+      include: [{ model: Role, as: "role", attributes: ["RoleName"] }],
+    });
 
     if (!user || !user.IsActive) {
       return res.status(401).json({
@@ -29,7 +29,7 @@ const authMiddleware = async (req, res, next) => {
     req.user = {
       UserID: user.UserID,
       RoleID: user.RoleID,
-
+      RoleName: user.role?.RoleName || null,
       Email: user.Email,
     };
 

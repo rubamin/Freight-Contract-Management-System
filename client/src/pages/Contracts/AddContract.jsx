@@ -12,7 +12,10 @@ import {
   Divider,
 } from "@mui/material";
 import { CloudUpload } from "@mui/icons-material";
-
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import dayjs from "dayjs";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -30,33 +33,39 @@ import {
   fetchContractVendors,
 } from "../../redux/slices/contractSlice";
 
+const DISPLAY_DATE_FORMAT = "DD/MM/YYYY";
 
 const initialFormData = {
   VendorID: "",
   VendorPAN: "",
   ContractNumber: "",
-  ValidFrom: "",
-  ValidTo: "",
-
+  ValidFrom: "", // Stored as YYYY-MM-DD string for API
+  ValidTo: "",   // Stored as YYYY-MM-DD string for API
   Remarks: "",
   Status: "Draft",
 };
 
 const contractStatuses = ["Draft", "Active", "Expired", "Cancelled"];
 
-const formatDate = (value) => {
-  if (!value) return "";
-  return String(value).slice(0, 10);
+// Helper to convert backend string to dayjs for DatePicker
+const toDayjsValue = (val) => {
+  if (!val) return null;
+  const parsed = dayjs(val);
+  return parsed.isValid() ? parsed : null;
+};
 
+// Helper to format DatePicker value to YYYY-MM-DD for backend and form state
+const parseDateForApi = (newValue) => {
+  if (!newValue || !dayjs(newValue).isValid()) return "";
+  return dayjs(newValue).format("YYYY-MM-DD");
 };
 
 const buildFormDataFromContract = (contract) => ({
   VendorID: contract?.VendorID || "",
   VendorPAN: contract?.VendorPAN || contract?.vendor?.PANNo || "",
   ContractNumber: contract?.ContractNo || "",
-  ValidFrom: formatDate(contract?.ContractStartDate),
-  ValidTo: formatDate(contract?.ContractEndDate),
-
+  ValidFrom: contract?.ContractStartDate ? String(contract.ContractStartDate).slice(0, 10) : "",
+  ValidTo: contract?.ContractEndDate ? String(contract.ContractEndDate).slice(0, 10) : "",
   Remarks: contract?.Remarks || "",
   Status: contract?.Status || "Draft",
 });
@@ -123,6 +132,11 @@ const AddContract = () => {
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
+  const handleDateChange = (field, newValue) => {
+    const formattedDate = parseDateForApi(newValue);
+    setFormData((prev) => ({ ...prev, [field]: formattedDate }));
+    setErrors((prev) => ({ ...prev, [field]: "" }));
+  };
 
   const handleVendorChange = (event) => {
     const targetVendorId = event.target.value;
@@ -201,210 +215,219 @@ const AddContract = () => {
   };
 
   return (
-    <Box p={3}>
-      <Paper sx={{ p: 4, borderRadius: 3, boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.05)" }}>
-        <PageHeader
-          title={isViewMode ? "View Contract" : isEditMode ? "Edit Contract" : "Create Contract"}
-          breadcrumbs={[
-            { label: "Dashboard", path: "/vendors" },
-            { label: "Contract Master", path: "/contracts" },
-            { label: isViewMode ? "View" : isEditMode ? "Edit" : "Create" },
-          ]}
-        />
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Box p={3}>
+        <Paper sx={{ p: 4, borderRadius: 3, boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.05)" }}>
+          <PageHeader
+            title={isViewMode ? "View Contract" : isEditMode ? "Edit Contract" : "Create Contract"}
+            breadcrumbs={[
+              { label: "Dashboard", path: "/dashboard" },
+              { label: "Contract Master", path: "/contracts" },
+              { label: isViewMode ? "View" : isEditMode ? "Edit" : "Create" },
+            ]}
+          />
 
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }} noValidate>
-          <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: "text.primary" }}>
-            Contract Basic Parameters
-          </Typography>
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }} noValidate>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: "text.primary" }}>
+              Contract Basic Parameters
+            </Typography>
 
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                sm: "1fr 1fr",
-                md: "1fr 1fr 1fr 1fr",
-              },
-              gap: 3,
-              alignItems: "start",
-            }}
-          >
-            {/* Vendor Selector Dropdown */}
-            <FormControl fullWidth variant="outlined" error={Boolean(errors.VendorID)} size="small">
-              <InputLabel shrink>Vendor</InputLabel>
-              <Select
-                label="Vendor"
-                name="VendorID"
-                displayEmpty
-                notched
-                value={formData.VendorID}
-                onChange={handleVendorChange}
-                disabled={isReadOnly}
-              >
-                <MenuItem value="" disabled>Select Vendor</MenuItem>
-                {vendors.map((vendor) => (
-                  <MenuItem key={vendor.VendorID} value={vendor.VendorID}>
-                    {vendor.VendorName}
-                  </MenuItem>
-                ))}
-              </Select>
-              <FormHelperText>{errors.VendorID}</FormHelperText>
-            </FormControl>
-
-            {/* Vendor PAN Number Field */}
-            <CustomTextField
-              label="Vendor PAN Number"
-              name="VendorPAN"
-              value={formData.VendorPAN}
-              slotProps={{
-                input: { readOnly: true },
-                inputLabel: { shrink: true },
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "1fr 1fr",
+                  md: "1fr 1fr 1fr 1fr",
+                },
+                gap: 3,
+                alignItems: "start",
               }}
-            />
+            >
+              {/* Vendor Selector Dropdown */}
+              <FormControl fullWidth variant="outlined" error={Boolean(errors.VendorID)} size="small">
+                <InputLabel shrink>Vendor</InputLabel>
+                <Select
+                  label="Vendor"
+                  name="VendorID"
+                  displayEmpty
+                  notched
+                  value={formData.VendorID}
+                  onChange={handleVendorChange}
+                  disabled={isReadOnly}
+                >
+                  <MenuItem value="" disabled>Select Vendor</MenuItem>
+                  {vendors.map((vendor) => (
+                    <MenuItem key={vendor.VendorID} value={vendor.VendorID}>
+                      {vendor.VendorName}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <FormHelperText>{errors.VendorID}</FormHelperText>
+              </FormControl>
 
-            {/* Contract Number Field */}
-            <CustomTextField
-              required
-              label="Contract Number"
-              name="ContractNumber"
-              placeholder="Enter Contract Number"
-              value={formData.ContractNumber}
-              onChange={handleChange}
-              error={Boolean(errors.ContractNumber)}
-              helperText={errors.ContractNumber}
-              slotProps={{
-                input: { readOnly: isReadOnly },
-                inputLabel: { shrink: true },
-              }}
-            />
-
-            {/* Contract Status Selector */}
-            <FormControl fullWidth variant="outlined" size="small">
-              <InputLabel shrink>Contract Status</InputLabel>
-              <Select
-                label="Contract Status"
-                name="Status"
-                notched
-                value={formData.Status}
-                onChange={handleChange}
-                disabled={isReadOnly}
-              >
-                {contractStatuses.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {/* Validity From Date */}
-            <CustomTextField
-              required
-              label="Validity From"
-              name="ValidFrom"
-              type="date"
-              value={formData.ValidFrom}
-              onChange={handleChange}
-              error={Boolean(errors.ValidFrom)}
-              helperText={errors.ValidFrom}
-              slotProps={{
-                input: { readOnly: isReadOnly },
-                inputLabel: { shrink: true },
-              }}
-            />
-
-            {/* Validity To Date */}
-            <CustomTextField
-              required
-              label="Validity To"
-              name="ValidTo"
-              type="date"
-              value={formData.ValidTo}
-              onChange={handleChange}
-              error={Boolean(errors.ValidTo)}
-              helperText={errors.ValidTo}
-              slotProps={{
-                htmlInput: { min: formData.ValidFrom || undefined },
-                input: { readOnly: isReadOnly },
-                inputLabel: { shrink: true },
-              }}
-            />
-          </Box>
-
-          {/* Rate Matrix Upload and Remarks Section */}
-          <Box sx={{ mt: 3, display: "grid", gridTemplateColumns: { md: "1fr 3fr" }, gap: 3 }}>
-            <Box>
-              <Button
-                fullWidth
-                component="label"
-                variant="outlined"
-                startIcon={<CloudUpload />}
-                sx={{
-                  py: 1.8,
-                  borderColor: errors.RateMatrix ? "error.main" : "rgba(0, 0, 0, 0.23)",
-                  justifyContent: "center",
+              {/* Vendor PAN Number Field */}
+              <CustomTextField
+                label="Vendor PAN Number"
+                name="VendorPAN"
+                value={formData.VendorPAN}
+                slotProps={{
+                  input: { readOnly: true },
+                  inputLabel: { shrink: true },
                 }}
+              />
+
+              {/* Contract Number Field */}
+              <CustomTextField
+                required
+                label="Contract Number"
+                name="ContractNumber"
+                placeholder="Enter Contract Number"
+                value={formData.ContractNumber}
+                onChange={handleChange}
+                error={Boolean(errors.ContractNumber)}
+                helperText={errors.ContractNumber}
+                slotProps={{
+                  input: { readOnly: isReadOnly },
+                  inputLabel: { shrink: true },
+                }}
+              />
+
+              {/* Contract Status Selector */}
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel shrink>Contract Status</InputLabel>
+                <Select
+                  label="Contract Status"
+                  name="Status"
+                  notched
+                  value={formData.Status}
+                  onChange={handleChange}
+                  disabled={isReadOnly}
+                >
+                  {contractStatuses.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {/* Validity From Date Picker */}
+              <DatePicker
+                label="Validity From"
+                value={toDayjsValue(formData.ValidFrom)}
+                onChange={(newValue) => handleDateChange("ValidFrom", newValue)}
+                format={DISPLAY_DATE_FORMAT}
                 disabled={isReadOnly}
-              >
-                <Typography noWrap variant="body2">
-                  {rateMatrix ? rateMatrix.name : contract?.RateMatrixFileName || "Upload Rate Matrix (Excel)"}
-                </Typography>
-                <input hidden type="file" accept=".xls,.xlsx" onChange={handleRateMatrixChange} />
-              </Button>
-              {errors.RateMatrix && (
-                <FormHelperText error sx={{ mx: 1 }}>{errors.RateMatrix}</FormHelperText>
-              )}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    fullWidth: true,
+                    error: Boolean(errors.ValidFrom),
+                    helperText: errors.ValidFrom,
+                    slotProps: {
+                      inputLabel: { shrink: true },
+                    },
+                  },
+                }}
+              />
+
+              {/* Validity To Date Picker */}
+              <DatePicker
+                label="Validity To"
+                value={toDayjsValue(formData.ValidTo)}
+                onChange={(newValue) => handleDateChange("ValidTo", newValue)}
+                format={DISPLAY_DATE_FORMAT}
+                minDate={formData.ValidFrom ? dayjs(formData.ValidFrom) : undefined}
+                disabled={isReadOnly}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    fullWidth: true,
+                    error: Boolean(errors.ValidTo),
+                    helperText: errors.ValidTo,
+                    slotProps: {
+                      inputLabel: { shrink: true },
+                    },
+                  },
+                }}
+              />
             </Box>
 
-            <CustomTextField
-              label="General Remarks"
-              name="Remarks"
-              placeholder="Enter additional description comments..."
-              value={formData.Remarks}
-              onChange={handleChange}
-              slotProps={{
-                input: { readOnly: isReadOnly },
-                inputLabel: { shrink: true },
-              }}
-            />
-          </Box>
+            {/* Rate Matrix Upload and Remarks Section */}
+            <Box sx={{ mt: 3, display: "grid", gridTemplateColumns: { md: "1fr 3fr" }, gap: 3 }}>
+              <Box>
+                <Button
+                  fullWidth
+                  component="label"
+                  variant="outlined"
+                  startIcon={<CloudUpload />}
+                  sx={{
+                    py: 1.8,
+                    borderColor: errors.RateMatrix ? "error.main" : "rgba(0, 0, 0, 0.23)",
+                    justifyContent: "center",
+                  }}
+                  disabled={isReadOnly}
+                >
+                  <Typography noWrap variant="body2">
+                    {rateMatrix ? rateMatrix.name : contract?.RateMatrixFileName || "Upload Rate Matrix (Excel)"}
+                  </Typography>
+                  <input hidden type="file" accept=".xls,.xlsx" onChange={handleRateMatrixChange} />
+                </Button>
+                {errors.RateMatrix && (
+                  <FormHelperText error sx={{ mx: 1 }}>{errors.RateMatrix}</FormHelperText>
+                )}
+              </Box>
 
-          <Divider sx={{ my: 4 }} />
+              <CustomTextField
+                label="General Remarks"
+                name="Remarks"
+                placeholder="Enter additional description comments..."
+                value={formData.Remarks}
+                onChange={handleChange}
+                slotProps={{
+                  input: { readOnly: isReadOnly },
+                  inputLabel: { shrink: true },
+                }}
+              />
+            </Box>
 
-          {/* Form Footer Action Buttons */}
-          <Box sx={{ mt: 5, display: "flex", justifyContent: "flex-end", gap: 2 }}>
-            <Button variant="outlined" sx={{ px: 4 }} onClick={handleCancel}>
-              Cancel
-            </Button>
-            {!isReadOnly && (
-              <Button variant="outlined" sx={{ px: 4 }} onClick={handleReset} disabled={saving}>
-                Reset
+            <Divider sx={{ my: 4 }} />
+
+            {/* Form Footer Action Buttons */}
+            <Box sx={{ mt: 5, display: "flex", justifyContent: "flex-end", gap: 2 }}>
+              <Button variant="outlined" sx={{ px: 4 }} onClick={handleCancel}>
+                Cancel
               </Button>
-            )}
-            {!isReadOnly && (
-              <CustomButton loading={saving} loadingText="Saving..." type="submit" sx={{ mt: 0, height: 36,maxWidth: "250px", px: 5 }}>
-                Save Contract
-              </CustomButton>
-            )}
+              {!isReadOnly && (
+                <Button variant="outlined" sx={{ px: 4 }} onClick={handleReset} disabled={saving}>
+                  Reset
+                </Button>
+              )}
+              {!isReadOnly && (
+                <CustomButton loading={saving} loadingText="Saving..." type="submit" sx={{ mt: 0, height: 36, maxWidth: "250px", px: 5 }}>
+                  Save Contract
+                </CustomButton>
+              )}
+            </Box>
           </Box>
-        </Box>
-      </Paper>
+        </Paper>
 
-      {/* Snackbar Feedback Notification */}
-      <AppSnackbar
-        open={snackbar.open}
-        severity={snackbar.severity}
-        message={snackbar.message}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      />
+        {/* Snackbar Feedback Notification */}
+        <AppSnackbar
+          open={snackbar.open}
+          severity={snackbar.severity}
+          message={snackbar.message}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        />
 
-      {/* Global Transparent Loader Overlay */}
-      <LoadingOverlay
-        open={loading || saving}
-        message={saving ? "Processing Rate Matrix & Destinations..." : "Loading Template..."}
-      />
-    </Box>
-
+        {/* Global Transparent Loader Overlay */}
+        <LoadingOverlay
+          open={loading || saving}
+          message={saving ? "Processing Rate Matrix & Destinations..." : "Loading Template..."}
+        />
+      </Box>
+    </LocalizationProvider>
   );
 };
 

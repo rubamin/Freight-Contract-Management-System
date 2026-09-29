@@ -1,7 +1,7 @@
 const express = require("express");
 const crudController = require("../controllers/crud.controller");
 const authMiddleware = require("../middleware/authMiddleware");
-
+const upload = require("../middleware/uploadMiddelware");
 
 const createModuleRouter = (registry) => {
   const router = express.Router();
@@ -22,6 +22,11 @@ const createModuleRouter = (registry) => {
     next();
   });
 
+  // Bulk Excel/CSV upload (task item 11) - only ever reachable for modules
+  // whose registry entry opts in via bulkUploadFields. Contract Master and
+  // Invoices are deliberately never given this field, so this route 404s
+  // for them via crud.controller's own guard.
+  router.post("/:module/bulk-upload", upload.moduleExcel, crudController.bulkUpload);
 
   router.get("/:module", crudController.getAll);
   router.get("/:module/:id", crudController.getById);

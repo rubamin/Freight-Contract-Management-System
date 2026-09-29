@@ -19,7 +19,11 @@ const VehicleType = sequelize.define(
     Unit: {
       type: DataTypes.STRING(20),
     },
-
+    IsActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
   },
   {
     tableName: "VehicleTypes",
