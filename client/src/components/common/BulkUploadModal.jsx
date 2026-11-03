@@ -11,6 +11,8 @@ import {
   Alert,
 } from "@mui/material";
 import { CloudUpload, Download } from "@mui/icons-material";
+import { UPLOAD_RULES } from "../../constants/uploadRules";
+import UploadRequirementsHint from "./UploadRequirementsHint";
 
 const BulkUploadModal = ({
   open,
@@ -62,7 +64,7 @@ const BulkUploadModal = ({
             type="file"
             id="excel-file-input"
             onChange={onFileSelect}
-            accept=".xlsx, .xls, .csv"
+            accept={UPLOAD_RULES.BULK_UPLOAD.accept}
             style={{ display: "none" }}
           />
           <label htmlFor="excel-file-input" style={{ cursor: "pointer" }}>
@@ -70,9 +72,7 @@ const BulkUploadModal = ({
             <Typography variant="subtitle1" fontWeight={600} color="textPrimary">
               {selectedFile ? selectedFile.name : "Click to select or drag Excel file here"}
             </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Supports .xlsx, .xls and .csv file formats
-            </Typography>
+            <UploadRequirementsHint rule={UPLOAD_RULES.BULK_UPLOAD} sx={{ fontSize: "0.75rem" }} />
           </label>
         </Box>
 

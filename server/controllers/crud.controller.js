@@ -1,10 +1,16 @@
 const XLSX = require("xlsx");
 const crudService = require("../services/crud.service");
-const { describeSequelizeError } = require("../utils/dbErrorHelper");
+const {
+  describeSequelizeError,
+  isForeignKeyReferenceError,
+} = require("../utils/dbErrorHelper");
+
+const HARD_DELETE_IN_USE_MESSAGE =
+  "This record is still used by existing contracts or invoices, so it cannot be permanently deleted. Deactivate it instead, or remove the records that use it first.";
 
 const getAll = async (req, res) => {
   try {
-    const result = await crudService.getAll(req.moduleConfig, req.query);
+    const result = await crudService.getAll(req.moduleConfig, req.query, req.user);
 
     return res.status(200).json({
       success: true,
@@ -20,7 +26,7 @@ const getAll = async (req, res) => {
 
 const getById = async (req, res) => {
   try {
-    const record = await crudService.getById(req.moduleConfig, req.params.id);
+    const record = await crudService.getById(req.moduleConfig, req.params.id, req.user);
 
     if (!record) {
       return res.status(404).json({
@@ -114,6 +120,42 @@ const remove = async (req, res) => {
   }
 };
 
+const hardRemove = async (req, res) => {
+  try {
+    if (!req.moduleConfig.allowHardDelete) {
+      return res.status(404).json({
+        success: false,
+        message: "Permanent delete is not available for this module.",
+      });
+    }
+
+    const record = await crudService.hardRemove(req.moduleConfig, req.params.id, req);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Record not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Record permanently deleted.",
+    });
+  } catch (error) {
+    if (isForeignKeyReferenceError(error)) {
+      return res.status(409).json({
+        success: false,
+        message: HARD_DELETE_IN_USE_MESSAGE,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: describeSequelizeError(error),
+    });
+  }
+};
+
 // Generic bulk-upload endpoint (task item 11). Only enabled for modules
 // whose registry entry defines `bulkUploadFields` - moduleRouteFactory
 // only mounts this route for those modules in the first place, but the
@@ -168,5 +210,6 @@ module.exports = {
   create,
   update,
   remove,
+  hardRemove,
   bulkUpload,
 };

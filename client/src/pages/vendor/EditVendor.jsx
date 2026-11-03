@@ -7,6 +7,7 @@ import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import VendorForm from "../../components/vendor/VendorForm";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
+import { getRedirectDelay, getSaveSuccessMessage, isPendingApproval } from "../../utils/saveResult";
 import {
   fetchVendorById,
   editVendor,
@@ -46,7 +47,9 @@ const EditVendor = () => {
     MobileNo: "",
     PANNo: "",
     IsActive: true,
+    UserRemarks: "",
   });
+  const [systemRemarks, setSystemRemarks] = useState("");
 
   const [gstNumbers, setGSTNumbers] = useState([
     {
@@ -75,7 +78,9 @@ const EditVendor = () => {
           MobileNo: vendor.MobileNo || "",
           PANNo: vendor.PANNo || "",
           IsActive: vendor.IsActive,
+          UserRemarks: vendor.UserRemarks || "",
         });
+        setSystemRemarks(vendor.Remarks || "");
 
         // Map existing GST numbers properly to match object format expected by table/form.
         // VendorGSTID is preserved here (bug fix - task item 3) so the backend can
@@ -163,13 +168,13 @@ const EditVendor = () => {
       if (editVendor.fulfilled.match(result)) {
         setSnackbar({
           open: true,
-          severity: "success",
-          message: "Vendor Updated Successfully",
+          severity: isPendingApproval(result.payload) ? "info" : "success",
+          message: getSaveSuccessMessage(result.payload, "Vendor Updated Successfully"),
         });
 
         setTimeout(() => {
           navigate("/vendors");
-        }, 1000);
+        }, getRedirectDelay(result.payload));
       } else {
         throw new Error(result.payload || "Failed to update vendor data.");
       }
@@ -203,6 +208,7 @@ const EditVendor = () => {
           handleCancel={handleCancel}
           gstNumbers={gstNumbers}
           setGSTNumbers={handleGstNumbersChange} // Passed state updater function correctly
+          systemRemarks={systemRemarks}
           loading={loading}
           errors={errors}
         />

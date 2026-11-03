@@ -20,9 +20,9 @@ export const MODULE_LABELS = {
   [MODULE_KEYS.DESTINATION_MASTER]: "Destination Master",
   [MODULE_KEYS.WEIGHT_MASTER]: "Weight Master",
   [MODULE_KEYS.VEHICLE_TYPE_MASTER]: "Vehicle Type Master",
-  [MODULE_KEYS.CUSTOMER_MASTER]: "Customer Master",
+  [MODULE_KEYS.CUSTOMER_MASTER]: "Customer / Supplier Master",
   [MODULE_KEYS.USER_MASTER]: "User Master",
   [MODULE_KEYS.INVOICES]: "Invoices",
   [MODULE_KEYS.REPORTS]: "Reports",
-  [MODULE_KEYS.SETTINGS_HIERARCHY]: "Settings & Hierarchy",
+  [MODULE_KEYS.SETTINGS_HIERARCHY]: "Hierarchy & Approval Workflow",
 };

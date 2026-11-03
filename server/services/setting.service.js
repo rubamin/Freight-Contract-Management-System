@@ -1,111 +1,41 @@
 const { QueryTypes } = require('sequelize');
 const sequelize = require("../config/database");
+const approvalWorkflowService = require("./approvalWorkflow.service");
+const { LOCATION_ACTIONS, getLocationIdsWithAction } = require("../utils/locationAccess");
 
-const getSettingMetadata = async () => {
+const sameId = (a, b) => Number(a) === Number(b);
+
+// Keeps only the locations the user has the action on, and the Company /
+// SBU / Plant levels above them (Add / Edit Invoice location pickers).
+const limitHierarchyToAccess = async (hierarchy, user, access) => {
+    if (!Object.values(LOCATION_ACTIONS).includes(access)) return hierarchy;
+    const allowedIds = await getLocationIdsWithAction(user, access);
+    if (!allowedIds) return hierarchy;
+
+    const locations = hierarchy.locations.filter((location) => allowedIds.some((id) => sameId(id, location.LocationID)));
+    const plants = hierarchy.plants.filter((plant) => locations.some((location) => sameId(location.PlantHierarchyID, plant.PlantHierarchyID)));
+    const sbus = hierarchy.sbus.filter((sbu) => plants.some((plant) => sameId(plant.SBUID, sbu.SBUID)));
+    const companies = hierarchy.companies.filter((company) => sbus.some((sbu) => sameId(sbu.CompanyID, company.CompanyID)));
+    return { ...hierarchy, companies, sbus, plants, locations };
+};
+
+// access (optional): view | add | edit - limit the hierarchy to the
+// locations the user has that action on. Admins always get everything.
+const getSettingMetadata = async ({ user, access } = {}) => {
     const companies = await sequelize.query("SELECT * FROM Companies WHERE IsActive = 1", { type: QueryTypes.SELECT });
     const sbus = await sequelize.query("SELECT * FROM SBUs WHERE IsActive = 1", { type: QueryTypes.SELECT });
     const plants = await sequelize.query("SELECT * FROM PlantsHierarchy WHERE IsActive = 1", { type: QueryTypes.SELECT });
     const locations = await sequelize.query("SELECT * FROM PlantLocations WHERE IsActive = 1", { type: QueryTypes.SELECT });
-    const users = await sequelize.query("SELECT UserID, FullName, Email FROM Users WHERE IsActive = 1", { type: QueryTypes.SELECT });
-    
-    // Join with Users table and PlantLocations for approval configurations
-    const approvalConfigs = await sequelize.query(`
-        SELECT ac.*, 
-               u1.FullName AS PrimaryUserName, 
-               u2.FullName AS OptionalUserName 
-        FROM ApprovalConfig ac
-        LEFT JOIN Users u1 ON ac.PrimaryUserID = u1.UserID
-        LEFT JOIN Users u2 ON ac.OptionalUserID = u2.UserID
+    const users = await sequelize.query(`
+        SELECT u.UserID, u.FullName, u.Email, r.RoleName
+        FROM Users u
+        LEFT JOIN Roles r ON r.RoleID = u.RoleID
+        WHERE u.IsActive = 1
+        ORDER BY u.FullName
     `, { type: QueryTypes.SELECT });
+    const workflows = await approvalWorkflowService.getAllWorkflows();
 
-    return { companies, sbus, plants, locations, users, approvalConfigs };
-};
-
-const saveApprovalConfig = async (data) => {
-    const { 
-        locationID, 
-        primaryUserID, 
-        primaryEmail, 
-        optionalUserID, 
-        optionalEmail, 
-        isPrimaryActive, 
-        isOptionalActive 
-    } = data;
-
-    // 1. Location ID parthi PlantHierarchyID, SBUID, ane CompanyID automatic track karo
-    const locationInfo = await sequelize.query(`
-        SELECT l.LocationID, l.PlantHierarchyID, p.SBUID, s.CompanyID 
-        FROM PlantLocations l
-        JOIN PlantsHierarchy p ON l.PlantHierarchyID = p.PlantHierarchyID
-        JOIN SBUs s ON p.SBUID = s.SBUID
-        WHERE l.LocationID = :locationID
-    `, { 
-        replacements: { locationID }, 
-        type: QueryTypes.SELECT 
-    });
-
-    const companyID = locationInfo.length > 0 ? locationInfo[0].CompanyID : null;
-    const sbuID = locationInfo.length > 0 ? locationInfo[0].SBUID : null;
-    const plantHierarchyID = locationInfo.length > 0 ? locationInfo[0].PlantHierarchyID : null;
-
-    // 2. Check if configuration already exists for this LocationID
-    const existing = await sequelize.query(
-        "SELECT * FROM ApprovalConfig WHERE LocationID = :locationID",
-        { replacements: { locationID }, type: QueryTypes.SELECT }
-    );
-
-    if (existing.length > 0) {
-        const updateQuery = `
-            UPDATE ApprovalConfig 
-            SET CompanyID = :companyID,
-                SBUID = :sbuID,
-                PlantHierarchyID = :plantHierarchyID,
-                PrimaryUserID = :primaryUserID, 
-                PrimaryEmail = :primaryEmail, 
-                OptionalUserID = :optionalUserID, 
-                OptionalEmail = :optionalEmail, 
-                IsPrimaryActive = :isPrimaryActive, 
-                IsOptionalActive = :isOptionalActive
-            WHERE LocationID = :locationID
-        `;
-        await sequelize.query(updateQuery, {
-            replacements: { 
-                companyID: companyID || null,
-                sbuID: sbuID || null,
-                plantHierarchyID: plantHierarchyID || null,
-                locationID, 
-                primaryUserID: primaryUserID || null, 
-                primaryEmail: primaryEmail || null, 
-                optionalUserID: optionalUserID || null, 
-                optionalEmail: optionalEmail || null, 
-                isPrimaryActive: isPrimaryActive ? 1 : 0, 
-                isOptionalActive: isOptionalActive ? 1 : 0 
-            },
-            type: QueryTypes.UPDATE
-        });
-    } else {
-        const insertQuery = `
-            INSERT INTO ApprovalConfig (CompanyID, SBUID, PlantHierarchyID, LocationID, PrimaryUserID, PrimaryEmail, OptionalUserID, OptionalEmail, IsPrimaryActive, IsOptionalActive)
-            VALUES (:companyID, :sbuID, :plantHierarchyID, :locationID, :primaryUserID, :primaryEmail, :optionalUserID, :optionalEmail, :isPrimaryActive, :isOptionalActive)
-        `;
-        await sequelize.query(insertQuery, {
-            replacements: { 
-                companyID: companyID || null,
-                sbuID: sbuID || null,
-                plantHierarchyID: plantHierarchyID || null,
-                locationID, 
-                primaryUserID: primaryUserID || null, 
-                primaryEmail: primaryEmail || null, 
-                optionalUserID: optionalUserID || null, 
-                optionalEmail: optionalEmail || null, 
-                isPrimaryActive: isPrimaryActive ? 1 : 0, 
-                isOptionalActive: isOptionalActive ? 1 : 0 
-            },
-            type: QueryTypes.INSERT
-        });
-    }
-
-    return true;
+    return limitHierarchyToAccess({ companies, sbus, plants, locations, users, workflows }, user, access);
 };
 
 const addMasterItem = async (data) => {
@@ -158,6 +88,5 @@ const addMasterItem = async (data) => {
 
 module.exports = {
     getSettingMetadata,
-    saveApprovalConfig,
     addMasterItem,
 };

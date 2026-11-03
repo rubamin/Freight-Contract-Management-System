@@ -1,11 +1,12 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 const { literal } = require("sequelize");
+const { REMARK_COLUMNS } = require("./remarkColumns");
+const { PARTY_TYPES, DEFAULT_PARTY_TYPE, normalizePartyType } = require("../constants/partyTypes");
 
-// Customer Master: source of truth for the Customer Name dropdown on
-// Add Invoice (task item 6). Previously invoices only had a free-text
-// CustomerName column with no backing master table, so customer names
-// could never be reused/validated across invoices.
+// Customer / Supplier Master: source of truth for the party dropdown on
+// Add / Edit Invoice. PartyType decides the list a record appears in -
+// suppliers on inbound invoices, customers on outbound invoices.
 const CustomerMaster = sequelize.define(
   "CustomerMaster",
   {
@@ -17,6 +18,17 @@ const CustomerMaster = sequelize.define(
     CustomerName: {
       type: DataTypes.STRING(300),
       allowNull: false,
+    },
+    PartyType: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: DEFAULT_PARTY_TYPE,
+      validate: {
+        isIn: {
+          args: [Object.values(PARTY_TYPES)],
+          msg: "Type must be Customer or Supplier.",
+        },
+      },
     },
     ContactPerson: {
       type: DataTypes.STRING(200),
@@ -44,6 +56,7 @@ const CustomerMaster = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    ...REMARK_COLUMNS,
     // No client-side defaultValue here on purpose - see AuditLog.js for the
     // full explanation: DataTypes.NOW can be serialized by Sequelize's
     // mssql dialect as the literal text "NOW" rather than a computed
@@ -60,6 +73,18 @@ const CustomerMaster = sequelize.define(
   {
     tableName: "CustomerMaster",
     timestamps: false,
+    hooks: {
+      // Accepts "Supplier" / "supplier" from the form, bulk upload and the
+      // inline add on Add Invoice; a blank type falls back to Customer, an
+      // unknown one is left as typed so validation reports it.
+      beforeValidate: (party) => {
+        if (party.PartyType === undefined || party.PartyType === null || party.PartyType === "") {
+          party.PartyType = DEFAULT_PARTY_TYPE;
+          return;
+        }
+        party.PartyType = normalizePartyType(party.PartyType) || party.PartyType;
+      },
+    },
   }
 );
 

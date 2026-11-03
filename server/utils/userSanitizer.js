@@ -10,6 +10,7 @@ const sanitizeUser = (user) => ({
   ProfilePhotoUrl: user.ProfilePhotoUrl,
   IsActive: user.IsActive,
   LastLogin: user.LastLogin,
+  MustChangePassword: Boolean(user.MustChangePassword),
   role: user.role,
 });
 

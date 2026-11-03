@@ -26,6 +26,10 @@ import { ArrowBack, Edit, Description, TableChart, Search } from "@mui/icons-mat
 import axios from "axios";
 
 import LoadingOverlay from "../../components/common/LoadingOverlay";
+import { getSlabLabel, isAdditionalRateRow, isDomesticRateRow } from "../../utils/rateMatrix";
+import ContractTypeRates from "../../components/contract/ContractTypeRates";
+import { CONTRACT_TYPES, DEFAULT_CONTRACT_TYPE, getContractTypeLabel } from "../../constants/contractTypes";
+import { USER_REMARKS_LABEL, SYSTEM_REMARKS_LABEL } from "../../constants/remarks";
 
 const statusColors = {
   DRAFT: "default",
@@ -84,25 +88,12 @@ const ViewContract = () => {
         
         if (Array.isArray(matrixData) && matrixData.length > 0) {
           // --- Process Sheet 1 Data ---
-          const sheet1RawData = matrixData.filter((row) => {
-            const wId = row.WeightID !== undefined ? row.WeightID : row.weightID;
-            const vId = row.VehicleTypeID !== undefined ? row.VehicleTypeID : row.vehicleTypeID;
-            return (wId !== null && wId !== undefined && wId !== "") || (vId === null || vId === undefined);
-          });
+          const sheet1RawData = matrixData.filter(isDomesticRateRow);
 
           if (sheet1RawData.length > 0) {
             const uniqueWeights = Array.from(
               new Set(
-                sheet1RawData
-                  .map((row) => {
-                    const w = row.weight || row.Weight;
-                    if (w && (w.Weight !== undefined || w.weight !== undefined)) {
-                      const value = w.Weight !== undefined ? w.Weight : w.weight;
-                      return `${value} ${w.WeightUnit || "MT"}`.trim();
-                    }
-                    return row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate";
-                  })
-                  .filter(Boolean)
+                sheet1RawData.map(getSlabLabel).filter(Boolean)
               )
             );
 
@@ -111,10 +102,7 @@ const ViewContract = () => {
               const destObj = row.destination || row.Destination;
               const cityName = destObj?.City || destObj?.city || `Destination ${row.DestinationID || row.destinationID || "N/A"}`;
               
-              const w = row.weight || row.Weight;
-              const weightLabel = (w && (w.Weight !== undefined || w.weight !== undefined)) 
-                ? `${w.Weight !== undefined ? w.Weight : w.weight} ${w.WeightUnit || "MT"}`.trim() 
-                : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
+              const weightLabel = getSlabLabel(row);
 
               if (!cityMap[cityName]) {
                 cityMap[cityName] = { cityName, rates: {} };
@@ -130,10 +118,7 @@ const ViewContract = () => {
           }
 
           // --- Process Sheet 2 Data ---
-          const s2Rows = matrixData.filter((r) => {
-            const vId = r.VehicleTypeID !== undefined ? r.VehicleTypeID : r.vehicleTypeID;
-            return vId !== null && vId !== undefined && vId !== "";
-          });
+          const s2Rows = matrixData.filter(isAdditionalRateRow);
           setSheet2Rows(s2Rows);
         }
 
@@ -160,6 +145,8 @@ const ViewContract = () => {
       vehicleName.toLowerCase().includes(searchQuery2.toLowerCase())
     );
   });
+
+  const isFtlOutbound = (contract?.ContractType || DEFAULT_CONTRACT_TYPE) === CONTRACT_TYPES.FTL_OUTBOUND;
 
   if (loading) {
     return <LoadingOverlay open={true} message="Loading Contract Details..." />;
@@ -201,7 +188,7 @@ const ViewContract = () => {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
             <Description color="primary" />
             <Typography variant="h6" fontWeight={600}>
-              Contract Information ({contract.ContractNo})
+              Contract Information
             </Typography>
             <Box sx={{ ml: "auto" }}>
               <Chip
@@ -216,12 +203,20 @@ const ViewContract = () => {
 
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="caption" color="textSecondary" display="block">Contract Type</Typography>
+              <Typography variant="body1" fontWeight={500}>{getContractTypeLabel(contract.ContractType)}</Typography>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="caption" color="textSecondary" display="block">Vendor Details</Typography>
               <Typography variant="body1" fontWeight={500}>{contract.vendor?.VendorName || "-"}</Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="caption" color="textSecondary" display="block">Vendor PAN Profile</Typography>
               <Typography variant="body1" fontWeight={500}>{contract.VendorPAN || "-"}</Typography>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="caption" color="textSecondary" display="block">Contact Person</Typography>
+              <Typography variant="body1" fontWeight={500}>{contract.ContactPerson || contract.vendor?.ContactPerson || "-"}</Typography>
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
@@ -250,16 +245,36 @@ const ViewContract = () => {
             )}
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography variant="caption" color="textSecondary" display="block">Remarks / Operational Notes</Typography>
+              <Typography variant="caption" color="textSecondary" display="block">{USER_REMARKS_LABEL}</Typography>
               <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                {contract.Remarks || "No specific dynamic internal descriptors saved."}
+                {contract.UserRemarks || "-"}
+              </Typography>
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="caption" color="textSecondary" display="block">{SYSTEM_REMARKS_LABEL}</Typography>
+              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
+                {contract.Remarks || "-"}
               </Typography>
             </Grid>
           </Grid>
         </CardContent>
       </Card>
 
+      {/* FTL Inbound / PTL Outbound / Part Load rates and charges */}
+      {!isFtlOutbound && (
+        <Card sx={{ mb: 3, boxShadow: 2, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              Contract Rate Matrix Preview
+            </Typography>
+            <ContractTypeRates contract={contract} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Contract Rate Matrix Sheets Preview Section */}
+      {isFtlOutbound && (
       <Card sx={{ mb: 3, boxShadow: 2, borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
@@ -454,8 +469,9 @@ const ViewContract = () => {
           )}
         </CardContent>
       </Card>
+      )}
     </Box>
   );
 };
 
-export default ViewContract;
+export default ViewContract;

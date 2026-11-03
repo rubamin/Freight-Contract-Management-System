@@ -25,6 +25,8 @@ import { lookupDistrictForCity, DEFAULT_STATE } from "../../constants/gujaratCit
 import { getRecords } from "../../services/moduleService";
 import { buildDuplicateKey, buildExistingKeySet } from "../../utils/duplicateCheck.js";
 import { playAlertSound } from "../../utils/alertSound.js";
+import { SYSTEM_REMARKS_HELPER } from "../../constants/remarks";
+import { getRedirectDelay, isPendingApproval, PENDING_REDIRECT_DELAY_MS } from "../../utils/saveResult";
 import {
   createModuleRecord,
   updateModuleRecord,
@@ -94,15 +96,22 @@ const normalizeFormValue = (field, value) => {
   return value ?? null;
 };
 
+// System fields (generated remarks) are display-only and never sent.
 const buildSubmissionPayload = (row, formFields) => {
   const payload = {};
 
-  formFields.forEach((field) => {
-    payload[field.name] = normalizeFormValue(field, row[field.name]);
-  });
+  formFields
+    .filter((field) => !field.systemField)
+    .forEach((field) => {
+      payload[field.name] = normalizeFormValue(field, row[field.name]);
+    });
 
   return payload;
 };
+
+// Fields with bulkApply get a "set all rows" selector on multi-row Add.
+const getBulkApplyFields = (formFields) =>
+  formFields.filter((field) => field.bulkApply && field.type === "select");
 
 // Generic add/edit form for any module whose moduleConfigs entry defines
 // `formFields`. Handles plain text/number/checkbox/select inputs - masters
@@ -185,6 +194,12 @@ const ModuleForm = ({ configKey, config }) => {
     setRowErrors((prev) => [...prev, {}]);
   };
 
+  // Sets one field to the same value on every row (e.g. all rows to
+  // Supplier); each row can still be changed individually afterwards.
+  const applyToAllRows = (field, value) => {
+    setRows((prev) => prev.map((row) => applyAutoFill(row, field, value)));
+  };
+
   const removeRow = (rowIndex) => {
     if (rows.length <= 1) return;
     setRows((prev) => prev.filter((_, index) => index !== rowIndex));
@@ -226,12 +241,15 @@ const ModuleForm = ({ configKey, config }) => {
     const apiSuccess = result.meta.requestStatus === "fulfilled" && result.payload?.success !== false;
 
     if (apiSuccess) {
+      const pending = isPendingApproval(result.payload);
       setSnackbar({
         open: true,
-        severity: "success",
+        severity: pending ? "info" : "success",
         message: result.payload?.message || `${config.title} updated successfully.`,
       });
-      navigate(config.path);
+      // The approval notice needs a moment to be read before leaving.
+      if (pending) setTimeout(() => navigate(config.path), getRedirectDelay(result.payload));
+      else navigate(config.path);
     } else {
       setSnackbar({
         open: true,
@@ -269,16 +287,28 @@ const ModuleForm = ({ configKey, config }) => {
     const remainingRows = [];
     const remainingErrors = [];
     let successCount = 0;
+    let pendingCount = 0;
 
     outcomes.forEach((result, index) => {
       const apiSuccess = createModuleRecord.fulfilled.match(result) && result.payload?.success !== false;
       if (apiSuccess) {
         successCount += 1;
+        if (isPendingApproval(result.payload)) pendingCount += 1;
         return;
       }
       remainingRows.push(rows[index]);
       remainingErrors.push({ _general: result.payload?.message || result.payload || "Failed to add this row." });
     });
+
+    if (remainingRows.length === 0 && pendingCount > 0) {
+      setSnackbar({
+        open: true,
+        severity: "info",
+        message: `${pendingCount} ${config.title} record(s) sent for approval. They will be saved once approved - track them under Master Approvals.`,
+      });
+      setTimeout(() => navigate(config.path), PENDING_REDIRECT_DELAY_MS);
+      return;
+    }
 
     if (remainingRows.length === 0) {
       setSnackbar({
@@ -308,10 +338,29 @@ const ModuleForm = ({ configKey, config }) => {
     }
   };
 
+  const renderSystemField = (field, row) => (
+    <Grid item xs={12} key={field.name}>
+      <TextField
+        fullWidth
+        multiline
+        minRows={2}
+        label={field.label}
+        value={row[field.name] || "-"}
+        helperText={SYSTEM_REMARKS_HELPER}
+        slotProps={{ input: { readOnly: true } }}
+        disabled
+      />
+    </Grid>
+  );
+
   const renderFormField = (field, row, rowIndex) => {
     const fieldError = rowErrors[rowIndex]?.[field.name];
     const readOnly = resolveFieldReadOnly(field, row);
     const value = row[field.name] ?? "";
+
+    if (field.systemField) {
+      return isEdit ? renderSystemField(field, row) : null;
+    }
 
     if (field.type === "select") {
       return (
@@ -352,13 +401,16 @@ const ModuleForm = ({ configKey, config }) => {
     }
 
     return (
-      <Grid item xs={12} sm={6} key={field.name}>
+      <Grid item xs={12} sm={field.multiline ? 12 : 6} key={field.name}>
         <TextField
           fullWidth
           type={field.type || "text"}
           label={field.label}
           required={field.required}
           disabled={readOnly}
+          multiline={Boolean(field.multiline)}
+          minRows={field.multiline ? 2 : undefined}
+          slotProps={field.maxLength ? { htmlInput: { maxLength: field.maxLength } } : undefined}
           value={value}
           error={Boolean(fieldError)}
           helperText={
@@ -375,6 +427,7 @@ const ModuleForm = ({ configKey, config }) => {
 
   const maxRows = config.maxRows || 10;
   const showMultiRowUi = !isEdit && config.multiRowEntry;
+  const bulkApplyFields = showMultiRowUi ? getBulkApplyFields(config.formFields) : [];
 
   return (
     <Box p={3}>
@@ -388,6 +441,34 @@ const ModuleForm = ({ configKey, config }) => {
       />
 
       <Box component="form" onSubmit={handleSubmit}>
+        {bulkApplyFields.length > 0 && (
+          <Paper sx={{ p: 2, mb: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Apply to all rows
+            </Typography>
+            {bulkApplyFields.map((field) => (
+              <TextField
+                key={field.name}
+                select
+                size="small"
+                label={field.label}
+                value=""
+                onChange={(e) => applyToAllRows(field, e.target.value)}
+                sx={{ minWidth: 220 }}
+              >
+                {field.options.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    All rows: {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ))}
+            <Typography variant="caption" color="text.secondary">
+              Each row can still be changed on its own below.
+            </Typography>
+          </Paper>
+        )}
+
         {rows.map((row, rowIndex) => (
           <Paper key={rowIndex} sx={{ p: 3, mb: 2 }}>
             {showMultiRowUi && (

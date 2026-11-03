@@ -13,6 +13,3 @@ ON ContractRateMatrix(VehicleTypeID);
 
 CREATE INDEX IX_AuditLogsUser
 ON AuditLogs(UserID);
-
-CREATE INDEX IX_EmailLogsStatus
-ON EmailLogs(Status);

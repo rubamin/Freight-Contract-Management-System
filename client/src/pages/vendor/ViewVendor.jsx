@@ -18,6 +18,7 @@ import LoadingOverlay from "../../components/common/LoadingOverlay";
 import DetailTextField from "../../components/common/DetailTextField";
 import DetailTable from "../../components/common/DetailTable";
 import { fetchVendorById } from "../../redux/slices/vendorSlice";
+import { USER_REMARKS_LABEL, SYSTEM_REMARKS_LABEL } from "../../constants/remarks";
 
 const ViewVendor = () => {
   const dispatch = useDispatch();
@@ -95,6 +96,14 @@ const ViewVendor = () => {
 
           <Grid size={{ xs: 12 }}>
             <DetailTextField label="Address" value={vendor.Address} multiline rows={3} />
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 6 }}>
+            <DetailTextField label={USER_REMARKS_LABEL} value={vendor.UserRemarks} multiline rows={2} />
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 6 }}>
+            <DetailTextField label={SYSTEM_REMARKS_LABEL} value={vendor.Remarks} multiline rows={2} />
           </Grid>
 
           <Grid size={{ xs: 12 }}>

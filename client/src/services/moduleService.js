@@ -24,6 +24,10 @@ export const deleteRecord = ({ apiGroup, moduleName, id }) => {
   return api.delete(`${buildModulePath({ apiGroup, moduleName })}/${id}`);
 };
 
+export const hardDeleteRecord = ({ apiGroup, moduleName, id }) => {
+  return api.delete(`${buildModulePath({ apiGroup, moduleName })}/${id}/hard`);
+};
+
 export const bulkUploadRecords = ({ apiGroup, moduleName, file }) => {
   const formData = new FormData();
   formData.append("file", file);

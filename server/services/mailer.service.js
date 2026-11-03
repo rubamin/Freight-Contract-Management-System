@@ -1,68 +1,84 @@
 const nodemailer = require("nodemailer");
-const { DEFAULT_NOTIFICATION_EMAIL } = require("../constants/email");
 
-// Same Gmail/nodemailer transporter configuration already used for invoice
-// notification emails (see controllers/invoiceDocumentController.js),
-// centralized here so other flows (e.g. password reset) can reuse it.
+// One SMTP transport for every email the app sends (invoice approvals,
+// master approvals, draft shares, account and password emails).
+// Settings come from SMTP_* in server/.env. The older EMAIL_HOST /
+// EMAIL_PORT / EMAIL_USER / EMAIL_PASS keys are still read when SMTP_*
+// is blank, so an existing .env keeps working until it is updated.
 //
-// NOTE: Gmail rejects this login with "Invalid login: 535-5.7.8" unless
-// EMAIL_PASS is a 16-character Google App Password (Google Account ->
-// Security -> 2-Step Verification -> App passwords), not the normal Gmail
-// account password. That mismatch is the most common cause of this email
-// silently failing to send.
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: DEFAULT_NOTIFICATION_EMAIL,
-    pass: process.env.EMAIL_PASS || "",
-  },
-});
+// NOTE (Gmail): the password must be a 16-character Google App Password
+// (Google Account -> Security -> 2-Step Verification -> App passwords),
+// not the normal account password, or Gmail answers "535-5.7.8".
+//
+// MAIL_DEV_LOG=true prints every email to the server log instead of
+// sending it (local testing only).
 
-const sendPasswordResetEmail = async (toEmail, resetLink) => {
-  if (!process.env.EMAIL_PASS) {
-    // Fail fast with a clear message instead of letting nodemailer attempt
-    // an auth handshake with an empty password and return an opaque error.
-    throw new Error(
-      "EMAIL_PASS environment variable is not set; cannot authenticate with the mail provider."
-    );
+const DEFAULT_SMTP_PORT = 587;
+
+// Account emails are sent while a database transaction is open, so a
+// stuck SMTP server must fail quickly instead of holding it for minutes.
+const SMTP_TIMEOUTS_MS = Object.freeze({ connection: 20000, greeting: 20000, socket: 30000 });
+
+let cachedTransport = null;
+
+const readSmtpSettings = () => {
+  const env = process.env;
+  const user = env.SMTP_USER || env.EMAIL_USER || "";
+  const port = Number(env.SMTP_PORT || env.EMAIL_PORT || DEFAULT_SMTP_PORT);
+  return {
+    host: env.SMTP_HOST || env.EMAIL_HOST || "",
+    port,
+    secure: env.SMTP_SECURE ? env.SMTP_SECURE === "true" : port === 465,
+    user,
+    pass: env.SMTP_PASS || env.EMAIL_PASS || "",
+    from: env.SMTP_FROM || user,
+  };
+};
+
+const isDevLogEnabled = () => process.env.MAIL_DEV_LOG === "true";
+
+// Fail fast with a clear message instead of letting nodemailer attempt
+// a connection with missing settings and return an opaque error.
+const assertMailConfigured = (settings) => {
+  if (!settings.host || !settings.user || !settings.pass) {
+    throw new Error("Email is not configured on the server: set SMTP_HOST, SMTP_USER and SMTP_PASS in server/.env");
+  }
+};
+
+const getTransport = (settings) => {
+  if (!cachedTransport) {
+    cachedTransport = nodemailer.createTransport({
+      host: settings.host,
+      port: settings.port,
+      secure: settings.secure,
+      auth: { user: settings.user, pass: settings.pass },
+      connectionTimeout: SMTP_TIMEOUTS_MS.connection,
+      greetingTimeout: SMTP_TIMEOUTS_MS.greeting,
+      socketTimeout: SMTP_TIMEOUTS_MS.socket,
+    });
+  }
+  return cachedTransport;
+};
+
+const logEmail = ({ to, subject, html, text }) => {
+  console.log("--- [mailer] MAIL_DEV_LOG=true, logging email instead of sending ---");
+  console.log(`To: ${to}`);
+  console.log(`Subject: ${subject}`);
+  console.log(text || html);
+  console.log("----------------------------------------------------------------------");
+};
+
+// Sends one email. Throws when it can't be sent (callers that must not
+// fail on email catch it themselves).
+const sendMail = async ({ to, subject, html, text, attachments = [] }) => {
+  if (isDevLogEnabled()) {
+    logEmail({ to, subject, html, text });
+    return;
   }
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-    </head>
-    <body style="font-family: Arial, sans-serif; background:#f4f7fc; padding:24px;">
-      <div style="max-width:480px; margin:0 auto; background:#ffffff; border-radius:12px; padding:32px; box-shadow:0 2px 8px rgba(15,23,42,0.08);">
-        <h2 style="color:#1e3a8a; margin-top:0;">Reset your password</h2>
-        <p style="color:#1f2937; font-size:14px; line-height:1.6;">
-          We received a request to reset the password for your Freight Contract Management account.
-          Click the button below to choose a new password. This link expires in 1 hour.
-        </p>
-        <p style="text-align:center; margin:32px 0;">
-          <a href="${resetLink}" style="background:#2563eb; color:#ffffff; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:600; display:inline-block;">
-            Reset Password
-          </a>
-        </p>
-        <p style="color:#6b7280; font-size:12px; line-height:1.6;">
-          If you didn't request this, you can safely ignore this email — your password will remain unchanged.
-          If the button above doesn't work, copy and paste this link into your browser:<br>
-          <span style="word-break:break-all;">${resetLink}</span>
-        </p>
-      </div>
-    </body>
-    </html>
-  `;
-
-  await transporter.sendMail({
-    from: DEFAULT_NOTIFICATION_EMAIL,
-    to: toEmail,
-    subject: "Reset your password - Freight Contract Management",
-    html: htmlContent,
-  });
+  const settings = readSmtpSettings();
+  assertMailConfigured(settings);
+  await getTransport(settings).sendMail({ from: settings.from, to, subject, html, text, attachments });
 };
 
-module.exports = {
-  sendPasswordResetEmail,
-};
+module.exports = { sendMail };

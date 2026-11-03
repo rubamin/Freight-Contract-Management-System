@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+const { REMARK_COLUMNS } = require("./remarkColumns");
 
 const VehicleType = sequelize.define(
   "VehicleType",
@@ -24,6 +25,7 @@ const VehicleType = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    ...REMARK_COLUMNS,
   },
   {
     tableName: "VehicleTypes",

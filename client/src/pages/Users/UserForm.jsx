@@ -1,58 +1,78 @@
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
+  Avatar,
   Box,
-  Paper,
-  Grid,
-  TextField,
-  MenuItem,
   Button,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
   Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Checkbox,
-  Divider,
 } from "@mui/material";
-import { Save } from "@mui/icons-material";
+import { Save, Person, Security, AccountTree } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
+import ModulePermissionMatrix from "../../components/users/ModulePermissionMatrix";
+import LocationAccessMatrix from "../../components/users/LocationAccessMatrix";
+import api from "../../services/api";
 import * as userService from "../../services/userService";
-import * as moduleService from "../../services/moduleService";
-import { MODULE_KEYS, MODULE_LABELS } from "../../constants/modules";
-import { DEFAULT_NEW_USER_PASSWORD } from "../../constants/userDefaults";
+import { MODULE_KEYS } from "../../constants/modules";
+import { NO_ACCESS } from "../../utils/accessMatrix";
 
 const MODULE_LIST = Object.values(MODULE_KEYS);
+const EMPTY_HIERARCHY = { companies: [], sbus: [], plants: [], locations: [] };
+const EMPTY_MODULE_PERMISSIONS = MODULE_LIST.reduce((acc, key) => ({ ...acc, [key]: { ...NO_ACCESS } }), {});
 
-// Combined Add/Edit User page with the per-module View/Add/Edit permission
-// matrix and per-location (Settings & Hierarchy) permission list (task
-// item 4). Kept as one page rather than splitting user details and
-// permissions across separate screens, since an admin virtually always
-// sets both together when onboarding a user.
+const toFlags = (row) => ({ canView: Boolean(row?.CanView), canAdd: Boolean(row?.CanAdd), canEdit: Boolean(row?.CanEdit) });
+
+const toModuleState = (modulePermissions) =>
+  MODULE_LIST.reduce((acc, key) => ({ ...acc, [key]: toFlags(modulePermissions?.[key]) }), {});
+
+// Resolved location access (legacy plant grants included) keyed by LocationID.
+const toLocationState = (locationAccess) =>
+  (locationAccess || []).reduce((acc, row) => ({ ...acc, [String(row.LocationID)]: toFlags(row) }), {});
+
+const toLocationPayload = (locationGrants) =>
+  Object.entries(locationGrants)
+    .filter(([, flags]) => flags.canView || flags.canAdd || flags.canEdit)
+    .map(([locationId, flags]) => ({ locationId: Number(locationId), ...flags }));
+
+const Section = ({ icon, title, subtitle, children }) => (
+  <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
+    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+      <Avatar sx={{ bgcolor: "rgba(30,58,138,0.1)", color: "primary.main" }}>{icon}</Avatar>
+      <Box>
+        <Typography variant="h6" fontWeight={700}>{title}</Typography>
+        {subtitle && <Typography variant="body2" color="text.secondary">{subtitle}</Typography>}
+      </Box>
+    </Stack>
+    {children}
+  </Paper>
+);
+
+// Combined Add/Edit User page: user details, the per-module View/Add/Edit
+// matrix, and the Settings & Hierarchy Access matrix (View/Add/Edit of
+// the invoices of each location). Kept as one page since an admin
+// virtually always sets all three together when onboarding a user.
 const UserForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
 
   const [roles, setRoles] = useState([]);
-  const [plants, setPlants] = useState([]);
+  const [hierarchy, setHierarchy] = useState(EMPTY_HIERARCHY);
   const [formData, setFormData] = useState({
     FullName: "",
     Email: "",
     MobileNo: "",
     RoleID: "",
-    // Task item 15: defaults to a standard temporary password, still
-    // editable by the admin before saving.
-    Password: DEFAULT_NEW_USER_PASSWORD,
   });
-  const [modulePermissions, setModulePermissions] = useState(
-    MODULE_LIST.reduce((acc, key) => ({ ...acc, [key]: { canView: false, canAdd: false, canEdit: false } }), {})
-  );
-  const [locationPlantIds, setLocationPlantIds] = useState([]);
+  const [modulePermissions, setModulePermissions] = useState(EMPTY_MODULE_PERMISSIONS);
+  const [locationGrants, setLocationGrants] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, severity: "success", message: "" });
@@ -60,18 +80,9 @@ const UserForm = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [rolesRes, plantsRes] = await Promise.all([
-          userService.listRoles(),
-          // Bug fix (task item 16): explicitly request a high pageSize so
-          // this list isn't silently truncated to the default page size
-          // (10) when there are more plants than that - the previous
-          // unqualified call could look "empty" once scrolled/filtered
-          // past the first page, since this UI has no pagination of its
-          // own for the plant checklist.
-          moduleService.getRecords({ apiGroup: "masters", moduleName: "plants", params: { pageSize: 1000 } }),
-        ]);
+        const [rolesRes, hierarchyRes] = await Promise.all([userService.listRoles(), api.get("/settings/metadata")]);
         setRoles(rolesRes.data.data || []);
-        setPlants(plantsRes.data?.data || []);
+        setHierarchy({ ...EMPTY_HIERARCHY, ...(hierarchyRes.data?.data || {}) });
 
         if (isEdit) {
           const [userRes, permissionsRes] = await Promise.all([
@@ -84,23 +95,11 @@ const UserForm = () => {
             Email: user.Email || "",
             MobileNo: user.MobileNo || "",
             RoleID: user.RoleID || "",
-            Password: "",
           });
 
           const permissions = permissionsRes.data.data;
-          const nextModulePermissions = {};
-          MODULE_LIST.forEach((key) => {
-            const p = permissions.modulePermissions?.[key];
-            nextModulePermissions[key] = {
-              canView: Boolean(p?.CanView),
-              canAdd: Boolean(p?.CanAdd),
-              canEdit: Boolean(p?.CanEdit),
-            };
-          });
-          setModulePermissions(nextModulePermissions);
-          setLocationPlantIds(
-            (permissions.locationPermissions || []).map((p) => p.PlantID)
-          );
+          setModulePermissions(toModuleState(permissions.modulePermissions));
+          setLocationGrants(toLocationState(permissions.locationAccess));
         }
       } catch (err) {
         setSnackbar({
@@ -121,19 +120,6 @@ const UserForm = () => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handlePermissionToggle = (moduleKey, action) => {
-    setModulePermissions((prev) => ({
-      ...prev,
-      [moduleKey]: { ...prev[moduleKey], [action]: !prev[moduleKey][action] },
-    }));
-  };
-
-  const handleLocationToggle = (plantId) => {
-    setLocationPlantIds((prev) =>
-      prev.includes(plantId) ? prev.filter((id_) => id_ !== plantId) : [...prev, plantId]
-    );
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -147,14 +133,9 @@ const UserForm = () => {
         userId = created.data.data.UserID;
       }
 
-      const permissionsPayload = MODULE_LIST.map((key) => ({
-        moduleKey: key,
-        canView: modulePermissions[key].canView,
-        canAdd: modulePermissions[key].canAdd,
-        canEdit: modulePermissions[key].canEdit,
-      }));
+      const permissionsPayload = MODULE_LIST.map((key) => ({ moduleKey: key, ...modulePermissions[key] }));
       await userService.updateUserModulePermissions(userId, permissionsPayload);
-      await userService.updateUserLocationPermissions(userId, locationPlantIds);
+      await userService.updateUserLocationPermissions(userId, toLocationPayload(locationGrants));
 
       setSnackbar({
         open: true,
@@ -178,7 +159,7 @@ const UserForm = () => {
   }
 
   return (
-    <Box p={3} component="form" onSubmit={handleSubmit}>
+    <Box component="form" onSubmit={handleSubmit} sx={{ pb: 10 }}>
       <PageHeader
         title={`${isEdit ? "Edit" : "Add"} User`}
         breadcrumbs={[
@@ -188,137 +169,50 @@ const UserForm = () => {
         ]}
       />
 
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>User Details</Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Full Name"
-              required
-              value={formData.FullName}
-              onChange={(e) => handleChange("FullName", e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              required
-              value={formData.Email}
-              onChange={(e) => handleChange("Email", e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Mobile No"
-              value={formData.MobileNo}
-              onChange={(e) => handleChange("MobileNo", e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              select
-              fullWidth
-              label="Role"
-              required
-              value={formData.RoleID}
-              onChange={(e) => handleChange("RoleID", e.target.value)}
-            >
-              {roles.map((role) => (
-                <MenuItem key={role.RoleID} value={role.RoleID}>
-                  {role.RoleName}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          {!isEdit && (
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="password"
-                label="Temporary Password"
-                helperText="Leave blank to auto-generate a random password."
-                value={formData.Password}
-                onChange={(e) => handleChange("Password", e.target.value)}
-              />
-            </Grid>
-          )}
-        </Grid>
-      </Paper>
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1, fontWeight: 700 }}>Module Permissions</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Control which masters and actions this user can access.
-        </Typography>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Module</TableCell>
-              <TableCell align="center">View</TableCell>
-              <TableCell align="center">Add</TableCell>
-              <TableCell align="center">Edit</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {MODULE_LIST.map((key) => (
-              <TableRow key={key}>
-                <TableCell>{MODULE_LABELS[key]}</TableCell>
-                <TableCell align="center">
-                  <Checkbox
-                    checked={modulePermissions[key].canView}
-                    onChange={() => handlePermissionToggle(key, "canView")}
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Checkbox
-                    checked={modulePermissions[key].canAdd}
-                    onChange={() => handlePermissionToggle(key, "canAdd")}
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Checkbox
-                    checked={modulePermissions[key].canEdit}
-                    onChange={() => handlePermissionToggle(key, "canEdit")}
-                  />
-                </TableCell>
-              </TableRow>
+      <Section icon={<Person />} title="User Details" subtitle="Login details and role of the user.">
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+          <TextField fullWidth label="Full Name" required value={formData.FullName} onChange={(e) => handleChange("FullName", e.target.value)} />
+          <TextField fullWidth label="Email" type="email" required value={formData.Email} onChange={(e) => handleChange("Email", e.target.value)} />
+          <TextField fullWidth label="Mobile No" value={formData.MobileNo} onChange={(e) => handleChange("MobileNo", e.target.value)} />
+          <TextField select fullWidth label="Role" required value={formData.RoleID} onChange={(e) => handleChange("RoleID", e.target.value)}>
+            {roles.map((role) => (
+              <MenuItem key={role.RoleID} value={role.RoleID}>
+                {role.RoleName}
+              </MenuItem>
             ))}
-          </TableBody>
-        </Table>
-      </Paper>
+          </TextField>
+        </Box>
+        {!isEdit && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            The Email is the login ID. A temporary password is generated and emailed to it; the user sets their
+            own password at first sign-in. If the email can&apos;t be sent, the user is not created.
+          </Alert>
+        )}
+      </Section>
 
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1, fontWeight: 700 }}>Settings &amp; Hierarchy Access</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Which plants/locations this user may view or select as a default plant.
-        </Typography>
-        <Grid container spacing={1}>
-          {plants.map((plant) => (
-            <Grid item xs={12} sm={6} md={4} key={plant.PlantID}>
-              <Checkbox
-                checked={locationPlantIds.includes(plant.PlantID)}
-                onChange={() => handleLocationToggle(plant.PlantID)}
-              />
-              {plant.PlantName || plant.PlantCode}
-            </Grid>
-          ))}
-        </Grid>
-      </Paper>
+      <Section icon={<Security />} title="Module Permissions" subtitle="Which modules this user sees, and whether they can add or edit in them. Add or Edit always includes View.">
+        <ModulePermissionMatrix moduleKeys={MODULE_LIST} value={modulePermissions} onChange={setModulePermissions} />
+      </Section>
 
-      <Divider sx={{ mb: 3 }} />
+      <Section
+        icon={<AccountTree />}
+        title="Settings & Hierarchy Access"
+        subtitle="Locations whose invoices this user can view, add and edit. Invoices of any other location are not shown and cannot be added or edited. Admins always have every location."
+      >
+        <LocationAccessMatrix hierarchy={hierarchy} value={locationGrants} onChange={setLocationGrants} />
+      </Section>
 
-      <Box display="flex" gap={2}>
-        <Button type="submit" variant="contained" startIcon={<Save />} disabled={saving}>
-          {isEdit ? "Save Changes" : "Create User"}
-        </Button>
-        <Button variant="outlined" onClick={() => navigate("/admin/users")}>
+      <Paper
+        elevation={6}
+        sx={{ position: "sticky", bottom: 16, px: 2.5, py: 1.5, borderRadius: 3, display: "flex", justifyContent: "flex-end", gap: 1.5, zIndex: 2 }}
+      >
+        <Button variant="outlined" onClick={() => navigate("/admin/users")} sx={{ textTransform: "none" }}>
           Cancel
         </Button>
-      </Box>
+        <Button type="submit" variant="contained" startIcon={<Save />} disabled={saving} sx={{ textTransform: "none", fontWeight: 600 }}>
+          {saving ? "Saving..." : isEdit ? "Save Changes" : "Create User"}
+        </Button>
+      </Paper>
 
       <AppSnackbar
         open={snackbar.open}

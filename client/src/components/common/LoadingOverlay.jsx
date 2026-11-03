@@ -4,7 +4,6 @@ import {
   Backdrop,
   CircularProgress,
   Typography,
-  Box,
   Paper,
 } from "@mui/material";
 

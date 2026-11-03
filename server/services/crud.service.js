@@ -2,6 +2,8 @@ const { Op, literal } = require("sequelize");
 const { AuditLog } = require("../models");
 const logger = require("../utils/logger");
 const { normalizeDateForDb } = require("../utils/dateFormatter");
+const { buildCreatedRemark, buildUpdatedRemark } = require("../utils/systemRemarks");
+const { SYSTEM_REMARKS_FIELD } = require("../constants/remarks");
 
 // Fails fast with a clear, actionable message instead of letting every
 // crud.service function crash later with a bare "Cannot read properties
@@ -39,15 +41,17 @@ const buildWhere = (search, searchFields = []) => {
 // module-specific structured filter (e.g. invoices' date/vendor/plant/status
 // filters). Modules that don't define buildExtraWhere behave exactly as
 // before this was added.
-const mergeWhere = (searchWhere, extraWhere) => {
-  const hasSearchWhere = Object.keys(searchWhere).length > 0;
-  const hasExtraWhere = Object.keys(extraWhere).length > 0;
+// Reflect.ownKeys is used because Sequelize operators (Op.and, Op.or) are
+// Symbol keys, which Object.keys skips - that silently dropped every
+// search, filter and access clause built only from operators.
+const hasConditions = (where) => Boolean(where) && Reflect.ownKeys(where).length > 0;
 
-  if (hasSearchWhere && hasExtraWhere) {
-    return { [Op.and]: [searchWhere, extraWhere] };
+const mergeWhere = (...whereClauses) => {
+  const clauses = whereClauses.filter(hasConditions);
+  if (clauses.length > 1) {
+    return { [Op.and]: clauses };
   }
-
-  return hasSearchWhere ? searchWhere : extraWhere;
+  return clauses[0] || {};
 };
 
 const getAttributeTypeKey = (attribute) => {
@@ -93,7 +97,12 @@ const sanitizeModelPayload = (model, data = {}) => {
   return sanitized;
 };
 
-const getAll = async (config, query = {}) => {
+// Modules flagged with systemRemarks own their Remarks column: whatever
+// the request sent is replaced with the generated text.
+const withSystemRemark = (config, data, buildRemark) =>
+  config.systemRemarks ? { ...data, [SYSTEM_REMARKS_FIELD]: buildRemark() } : data;
+
+const getAll = async (config, query = {}, user) => {
   assertValidModuleConfig(config);
   const {
     page = 1,
@@ -113,9 +122,10 @@ const getAll = async (config, query = {}) => {
 
   const searchWhere = buildWhere(search, config.searchFields);
   const extraWhere = config.buildExtraWhere ? config.buildExtraWhere(query) : {};
+  const accessWhere = config.buildAccessWhere ? await config.buildAccessWhere(user) : null;
 
   const { count, rows } = await config.model.findAndCountAll({
-    where: mergeWhere(searchWhere, extraWhere),
+    where: mergeWhere(searchWhere, extraWhere, accessWhere),
     include: config.include || [],
     order: [[selectedSortField, selectedSortOrder]],
     offset,
@@ -131,10 +141,19 @@ const getAll = async (config, query = {}) => {
   };
 };
 
-const getById = async (config, id) => {
+const getById = async (config, id, user) => {
   assertValidModuleConfig(config);
-  return await config.model.findByPk(id, {
+  const accessWhere = config.buildAccessWhere ? await config.buildAccessWhere(user) : null;
+  return await config.model.findOne({
+    where: mergeWhere({ [config.primaryKey]: id }, accessWhere),
     include: config.include || [],
+  });
+};
+
+const findAccessibleRecord = async (config, id, user) => {
+  const accessWhere = config.buildAccessWhere ? await config.buildAccessWhere(user) : null;
+  return config.model.findOne({
+    where: mergeWhere({ [config.primaryKey]: id }, accessWhere),
   });
 };
 
@@ -194,7 +213,7 @@ const create = async (config, data, req) => {
   // defaultValue: DataTypes.NOW for it, so it's stamped here explicitly
   // with a real JS Date whenever the model defines the column and the
   // caller didn't already supply one.
-  const createData = sanitizeModelPayload(config.model, data);
+  const createData = withSystemRemark(config, sanitizeModelPayload(config.model, data), () => buildCreatedRemark(req.user));
   if (config.model.rawAttributes.CreatedAt && (createData.CreatedAt === undefined || createData.CreatedAt === null)) {
     createData.CreatedAt = literal("GETDATE()");
   }
@@ -214,14 +233,18 @@ const create = async (config, data, req) => {
 
 const update = async (config, id, data, req) => {
   assertValidModuleConfig(config);
-  const record = await config.model.findByPk(id);
+  const record = await findAccessibleRecord(config, id, req.user);
 
   if (!record) {
     return null;
   }
 
   const oldData = record.toJSON();
-  const updateData = sanitizeModelPayload(config.model, data);
+  const updateData = withSystemRemark(
+    config,
+    sanitizeModelPayload(config.model, data),
+    () => buildUpdatedRemark(oldData[SYSTEM_REMARKS_FIELD], req.user)
+  );
   await record.update(updateData);
 
   await writeAuditLog({
@@ -238,7 +261,7 @@ const update = async (config, id, data, req) => {
 
 const remove = async (config, id, req) => {
   assertValidModuleConfig(config);
-  const record = await config.model.findByPk(id);
+  const record = await findAccessibleRecord(config, id, req.user);
 
   if (!record) {
     return null;
@@ -279,6 +302,32 @@ const remove = async (config, id, req) => {
   return record;
 };
 
+// Permanent delete for modules that opt in via allowHardDelete (Admin
+// only, enforced at the route). Unlike remove(), this ignores
+// softDeleteField and destroys the row; a foreign key error from records
+// that still reference it is left for the controller to report.
+const hardRemove = async (config, id, req) => {
+  assertValidModuleConfig(config);
+  const record = await findAccessibleRecord(config, id, req.user);
+
+  if (!record) {
+    return null;
+  }
+
+  const oldData = record.toJSON();
+  await record.destroy();
+
+  await writeAuditLog({
+    req,
+    tableName: config.tableName,
+    recordId: id,
+    actionType: "HARD_DELETE",
+    oldData,
+  });
+
+  return record;
+};
+
 // Generic bulk-create for any module whose registry entry defines
 // `bulkUploadFields` (task item 11: bulk Excel upload for every master
 // except Contract Master and Add Invoice). Rows come pre-parsed from the
@@ -303,7 +352,11 @@ const bulkUpload = async (config, rows, req) => {
     config.bulkUploadFields.forEach((field) => {
       if (row[field] !== undefined) data[field] = row[field];
     });
-    const sanitizedData = sanitizeModelPayload(config.model, data);
+    const sanitizedData = withSystemRemark(
+      config,
+      sanitizeModelPayload(config.model, data),
+      () => buildCreatedRemark(req.user, "Bulk upload")
+    );
     if (config.model.rawAttributes.CreatedAt && (sanitizedData.CreatedAt === undefined || sanitizedData.CreatedAt === null)) {
       sanitizedData.CreatedAt = literal("GETDATE()");
     }
@@ -333,5 +386,7 @@ module.exports = {
   create,
   update,
   remove,
+  hardRemove,
   bulkUpload,
+  writeAuditLog,
 };

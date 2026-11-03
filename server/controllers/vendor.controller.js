@@ -6,7 +6,7 @@ const XLSX = require("xlsx");
  */
 const createVendor = async (req, res) => {
   try {
-    const vendor = await vendorService.createVendor(req.body);
+    const vendor = await vendorService.createVendor(req.body, null, req.user);
 
     return res.status(201).json({
       success: true,
@@ -73,7 +73,9 @@ const updateVendor = async (req, res) => {
   try {
     const vendor = await vendorService.updateVendor(
       req.params.id,
-      req.body
+      req.body,
+      null,
+      req.user
     );
 
     return res.status(200).json({
@@ -148,7 +150,7 @@ const bulkUploadVendors = async (req, res) => {
       });
     }
 
-    const result = await vendorService.bulkUploadVendors(rawData, req.user?.id);
+    const result = await vendorService.bulkUploadVendors(rawData, req.user);
 
     return res.status(200).json({
       success: true,

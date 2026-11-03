@@ -5,6 +5,7 @@ import {
   getStoredAuth,
   setStoredAuth,
 } from "../../utils/storage";
+import { apiErrorMessage } from "../../utils/passwordRules";
 
 const storedAuth = getStoredAuth();
 
@@ -43,9 +44,7 @@ export const forgotPassword = createAsyncThunk(
       const response = await authService.forgotPassword(payload);
       return response.data.message;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to request password reset"
-      );
+      return rejectWithValue(apiErrorMessage(error, "Failed to send a code"));
     }
   }
 );
@@ -57,9 +56,7 @@ export const resetPassword = createAsyncThunk(
       const response = await authService.resetPassword(payload);
       return response.data.message;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to reset password"
-      );
+      return rejectWithValue(apiErrorMessage(error, "Failed to reset password"));
     }
   }
 );
@@ -81,6 +78,15 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
+    // A new { token, user } from the server after the user set or changed
+    // their password (the change ends every older session).
+    sessionUpdated(state, action) {
+      state.user = action.payload.user;
+      state.token = action.payload.token;
+      state.isAuthenticated = true;
+      setStoredAuth(action.payload);
+    },
+
     logout(state) {
       state.user = null;
       state.token = null;
@@ -152,6 +158,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearAuthError, clearPasswordResetStatus } = authSlice.actions;
+export const { sessionUpdated, logout, clearAuthError, clearPasswordResetStatus } = authSlice.actions;
 
 export default authSlice.reducer;

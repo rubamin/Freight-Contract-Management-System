@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     Box,
     Typography,
@@ -16,11 +16,17 @@ import {
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import SaveIcon from '@mui/icons-material/Save';
-import LockResetIcon from '@mui/icons-material/LockReset';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useDispatch, useSelector } from 'react-redux';
+import { useLocation } from 'react-router-dom';
 import { fetchProfile } from '../../redux/slices/authSlice';
 import * as userService from '../../services/userService';
 import { SERVER_ORIGIN } from '../../constants/appConfig';
+import usePermissions from '../../hooks/usePermissions';
+import UpdateDatabaseDialog from './UpdateDatabaseDialog';
+import { UPLOAD_RULES, findUploadRuleViolation } from '../../constants/uploadRules';
+import UploadRequirementsHint from '../../components/common/UploadRequirementsHint';
+import ChangePasswordCard, { CHANGE_PASSWORD_ANCHOR } from '../../components/auth/ChangePasswordCard';
 
 const buildPhotoUrl = (relativePath) => {
     if (!relativePath) return null;
@@ -31,6 +37,8 @@ export default function Profile() {
     const dispatch = useDispatch();
     const { user } = useSelector((state) => state.auth);
     const fileInputRef = useRef(null);
+    const { isAdmin } = usePermissions();
+    const [updateDatabaseOpen, setUpdateDatabaseOpen] = useState(false);
 
     const [formData, setFormData] = useState({
         FullName: user?.FullName || '',
@@ -40,14 +48,15 @@ export default function Profile() {
     const [photoPreviewUrl, setPhotoPreviewUrl] = useState(buildPhotoUrl(user?.ProfilePhotoUrl));
     const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-    const [passwordForm, setPasswordForm] = useState({
-        currentPassword: '',
-        newPassword: '',
-        confirmNewPassword: '',
-    });
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
-
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const location = useLocation();
+
+    // "Change password" in the user menu opens this page at that card.
+    useEffect(() => {
+        if (location.hash === `#${CHANGE_PASSWORD_ANCHOR}`) {
+            document.getElementById(CHANGE_PASSWORD_ANCHOR)?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [location.hash]);
 
     const showSnackbar = (message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
@@ -59,7 +68,13 @@ export default function Profile() {
 
     const handlePhotoSelect = (e) => {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
+        const violation = findUploadRuleViolation(file, UPLOAD_RULES.PROFILE_PHOTO);
+        if (violation) {
+            showSnackbar(violation, 'error');
+            return;
+        }
 
         setPhotoFile(file);
         setPhotoPreviewUrl(URL.createObjectURL(file));
@@ -94,38 +109,21 @@ export default function Profile() {
         }
     };
 
-    const handlePasswordFieldChange = (field) => (e) => {
-        setPasswordForm((prev) => ({ ...prev, [field]: e.target.value }));
-    };
-
-    const handleChangePassword = async (e) => {
-        e.preventDefault();
-
-        if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-            showSnackbar('New password and confirmation do not match.', 'error');
-            return;
-        }
-
-        setIsChangingPassword(true);
-        try {
-            await userService.changePassword({
-                currentPassword: passwordForm.currentPassword,
-                newPassword: passwordForm.newPassword,
-            });
-
-            setPasswordForm({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
-            showSnackbar('Password changed successfully.');
-        } catch (err) {
-            const message = err.response?.data?.errors?.join(', ') || err.response?.data?.message || 'Failed to change password.';
-            showSnackbar(message, 'error');
-        } finally {
-            setIsChangingPassword(false);
-        }
-    };
-
     return (
         <Box sx={{ maxWidth: 800, mx: 'auto' }}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>My Profile</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>My Profile</Typography>
+                {isAdmin && (
+                    <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<StorageIcon />}
+                        onClick={() => setUpdateDatabaseOpen(true)}
+                    >
+                        Update Database
+                    </Button>
+                )}
+            </Box>
 
             {/* --- PROFILE DETAILS CARD --- */}
             <Card sx={{ mb: 3 }}>
@@ -157,7 +155,7 @@ export default function Profile() {
                                     ref={fileInputRef}
                                     type="file"
                                     hidden
-                                    accept="image/png,image/jpeg,image/webp"
+                                    accept={UPLOAD_RULES.PROFILE_PHOTO.accept}
                                     onChange={handlePhotoSelect}
                                 />
                             </Box>
@@ -171,6 +169,7 @@ export default function Profile() {
                                     size="small"
                                     sx={{ mt: 0.5 }}
                                 />
+                                <UploadRequirementsHint rule={UPLOAD_RULES.PROFILE_PHOTO} sx={{ mt: 0.75 }} />
                             </Box>
                         </Box>
 
@@ -223,60 +222,14 @@ export default function Profile() {
             </Card>
 
             {/* --- CHANGE PASSWORD CARD --- */}
-            <Card>
-                <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>Change Password</Typography>
+            <ChangePasswordCard />
 
-                    <form onSubmit={handleChangePassword}>
-                        <Grid container spacing={3}>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    type="password"
-                                    label="Current Password"
-                                    value={passwordForm.currentPassword}
-                                    onChange={handlePasswordFieldChange('currentPassword')}
-                                    required
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    fullWidth
-                                    type="password"
-                                    label="New Password"
-                                    value={passwordForm.newPassword}
-                                    onChange={handlePasswordFieldChange('newPassword')}
-                                    required
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    fullWidth
-                                    type="password"
-                                    label="Confirm New Password"
-                                    value={passwordForm.confirmNewPassword}
-                                    onChange={handlePasswordFieldChange('confirmNewPassword')}
-                                    required
-                                />
-                            </Grid>
-                        </Grid>
-
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-                            <Button
-                                type="submit"
-                                variant="contained"
-                                color="warning"
-                                startIcon={<LockResetIcon />}
-                                disabled={isChangingPassword}
-                            >
-                                {isChangingPassword ? 'Updating...' : 'Change Password'}
-                            </Button>
-                        </Box>
-                    </form>
-                </CardContent>
-            </Card>
+            {isAdmin && (
+                <UpdateDatabaseDialog
+                    open={updateDatabaseOpen}
+                    onClose={() => setUpdateDatabaseOpen(false)}
+                />
+            )}
 
             <Snackbar
                 open={snackbar.open}

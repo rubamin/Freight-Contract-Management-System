@@ -20,6 +20,13 @@ export const formatDateDisplay = (date) => {
   return parsedDate.isValid() ? parsedDate.format(DISPLAY_DATE_FORMAT) : '-';
 };
 
+// Date and time of an event (approval history), e.g. 14/10/2026 15:42.
+export const formatDateTimeDisplay = (date) => {
+  if (!date) return '-';
+  const parsedDate = dayjs(date);
+  return parsedDate.isValid() ? parsedDate.format(`${DISPLAY_DATE_FORMAT} HH:mm`) : '-';
+};
+
 /**
  * Converts a dayjs value (as produced by a DatePicker) into the YYYY-MM-DD
  * string expected by the API/DB for DATEONLY columns.

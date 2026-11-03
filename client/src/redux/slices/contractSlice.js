@@ -204,7 +204,8 @@ const contractSlice = createSlice({
       })
       .addCase(editContract.fulfilled, (state, action) => {
         state.saving = false;
-        state.contract = action.payload.data;
+        // A change held for approval returns no contract yet.
+        state.contract = action.payload?.data?.ContractID ? action.payload.data : state.contract;
       })
       .addCase(editContract.rejected, (state, action) => {
         state.saving = false;

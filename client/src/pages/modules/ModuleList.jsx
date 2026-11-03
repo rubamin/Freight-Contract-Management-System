@@ -8,7 +8,7 @@ import {
   InputAdornment,
   Button,
 } from "@mui/material";
-import { Delete, Edit, Search, ToggleOff, CloudUpload } from "@mui/icons-material";
+import { Delete, DeleteForever, Edit, Search, ToggleOff, CloudUpload } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +28,7 @@ import {
 
 const ModuleList = ({ configKey }) => {
   const config = moduleConfigs[configKey];
-  const { canEdit, loaded: permissionsLoaded } = usePermissions();
+  const { canEdit, isAdmin, loaded: permissionsLoaded } = usePermissions();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { recordsByModule, totalRecordsByModule, loading, error } =
@@ -43,6 +43,9 @@ const ModuleList = ({ configKey }) => {
   const [bulkUploadFile, setBulkUploadFile] = useState(null);
   const [bulkUploadMessage, setBulkUploadMessage] = useState(null);
   const [bulkUploadProcessing, setBulkUploadProcessing] = useState(false);
+  const [hardDeleteDialog, setHardDeleteDialog] = useState(false);
+  const [hardDeleting, setHardDeleting] = useState(false);
+  const [feedback, setFeedback] = useState({ open: false, severity: "success", message: "" });
 
   const debouncedSearch = useDebounce(search, 500);
   const stateKey = config.stateKey || config.moduleName;
@@ -67,9 +70,16 @@ const ModuleList = ({ configKey }) => {
   }, [configKey, page, pageSize, debouncedSearch]);
 
   const columns = useMemo(() => {
+    // Select fields (e.g. PartyType) show their option label, not the code.
+    const optionLabelsByField = Object.fromEntries(
+      (config.formFields || [])
+        .filter((formField) => formField.options)
+        .map((formField) => [formField.name, Object.fromEntries(formField.options.map((o) => [o.value, o.label]))])
+    );
+
     const dataColumns = config.columns.map((field) => ({
       field,
-      headerName: field,
+      headerName: config.columnLabels?.[field] || field,
       flex: 1,
       minWidth: 140,
       renderCell: (params) => {
@@ -83,7 +93,7 @@ const ModuleList = ({ configKey }) => {
           );
         }
 
-        return params.value ?? "-";
+        return optionLabelsByField[field]?.[params.value] ?? params.value ?? "-";
       },
     }));
 
@@ -106,7 +116,7 @@ const ModuleList = ({ configKey }) => {
     const actionColumn = {
       field: "Action",
       headerName: "Action",
-      width: 110,
+      width: 150,
       sortable: false,
       renderCell: (params) => (
         <>
@@ -135,12 +145,24 @@ const ModuleList = ({ configKey }) => {
           >
             {config.softDeleteOnly ? <ToggleOff fontSize="small" /> : <Delete fontSize="small" />}
           </IconButton>
+          {config.allowHardDelete && permissionsLoaded && isAdmin && (
+            <IconButton
+              color="error"
+              title="Delete permanently"
+              onClick={() => {
+                setSelectedRecordId(params.row[config.idField]);
+                setHardDeleteDialog(true);
+              }}
+            >
+              <DeleteForever fontSize="small" />
+            </IconButton>
+          )}
         </>
       ),
     };
 
     return [srNoColumn, ...dataColumns, actionColumn];
-  }, [config, navigate, rows, page, pageSize, permissionsLoaded, canEdit]);
+  }, [config, navigate, rows, page, pageSize, permissionsLoaded, canEdit, isAdmin]);
 
   const handleDeleteConfirm = async () => {
     const result = await dispatch(
@@ -153,6 +175,28 @@ const ModuleList = ({ configKey }) => {
     if (removeModuleRecord.fulfilled.match(result)) {
       setDeleteDialog(false);
       loadRecords();
+    }
+  };
+
+  const handleHardDeleteConfirm = async () => {
+    setHardDeleting(true);
+    try {
+      const response = await moduleService.hardDeleteRecord({
+        apiGroup: config.apiGroup,
+        moduleName: config.moduleName,
+        id: selectedRecordId,
+      });
+      setFeedback({ open: true, severity: "success", message: response.data.message });
+      loadRecords();
+    } catch (err) {
+      setFeedback({
+        open: true,
+        severity: "error",
+        message: err.response?.data?.message || "Failed to permanently delete the record.",
+      });
+    } finally {
+      setHardDeleting(false);
+      setHardDeleteDialog(false);
     }
   };
 
@@ -274,6 +318,25 @@ const ModuleList = ({ configKey }) => {
         }
         onClose={() => setDeleteDialog(false)}
         onConfirm={handleDeleteConfirm}
+      />
+
+      {config.allowHardDelete && isAdmin && (
+        <DeleteDialog
+          open={hardDeleteDialog}
+          title={`Permanently Delete ${config.title}`}
+          message="This removes the record from the database for good and cannot be undone. Records still used by contracts or invoices cannot be deleted."
+          loading={hardDeleting}
+          onClose={() => setHardDeleteDialog(false)}
+          onConfirm={handleHardDeleteConfirm}
+        />
+      )}
+
+      <AppSnackbar
+        open={feedback.open}
+        severity={feedback.severity}
+        message={feedback.message}
+        autoHideDuration={6000}
+        onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
       />
 
       <LoadingOverlay open={loading} message={`Loading ${config.title}...`} />

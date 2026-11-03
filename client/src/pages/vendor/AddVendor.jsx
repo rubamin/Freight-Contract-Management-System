@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Box, Paper } from "@mui/material";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { Add } from "@mui/icons-material";
 
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
@@ -10,6 +9,7 @@ import VendorForm from "../../components/vendor/VendorForm";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 
 import { addVendor } from "../../redux/slices/vendorSlice";
+import { getRedirectDelay, getSaveSuccessMessage, isPendingApproval } from "../../utils/saveResult";
 
 // GST State Code mapping definitions matching legal regulations
 const GST_STATE_MAP = {
@@ -44,6 +44,7 @@ const AddVendor = () => {
     MobileNo: "",
     PANNo: "",
     IsActive: true,
+    UserRemarks: "",
   });
 
   const [gstNumbers, setGSTNumbers] = useState([
@@ -123,13 +124,13 @@ const AddVendor = () => {
       if (addVendor.fulfilled.match(result)) {
         setSnackbar({
           open: true,
-          severity: "success",
-          message: "Vendor Created Successfully",
+          severity: isPendingApproval(result.payload) ? "info" : "success",
+          message: getSaveSuccessMessage(result.payload, "Vendor Created Successfully"),
         });
 
         setTimeout(() => {
           navigate("/vendors");
-        }, 1000);
+        }, getRedirectDelay(result.payload));
       } else {
         throw new Error(result.payload || "Failed to process data save action.");
       }

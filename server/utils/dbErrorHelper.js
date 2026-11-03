@@ -18,6 +18,21 @@ const isForeignKeyViolationForTable = (error, referencedTableName) => {
 };
 
 /**
+ * Checks whether a delete failed because other rows still reference the
+ * record through a foreign key (SQL Server error 547 on DELETE).
+ *
+ * @param {Error} error - Error thrown by a Sequelize query.
+ * @returns {boolean}
+ */
+const isForeignKeyReferenceError = (error) => {
+  const rawMessage = error?.original?.message || error?.message || "";
+  return (
+    error?.name === "SequelizeForeignKeyConstraintError" ||
+    rawMessage.includes("REFERENCE constraint")
+  );
+};
+
+/**
  * Sequelize's SequelizeValidationError/SequelizeUniqueConstraintError both
  * expose their real cause on error.errors[] (e.g. "City must be unique"),
  * but their own top-level .message is just the generic string
@@ -34,4 +49,8 @@ const describeSequelizeError = (error) => {
   return error?.original?.message || error?.message || "An unexpected error occurred.";
 };
 
-module.exports = { isForeignKeyViolationForTable, describeSequelizeError };
+module.exports = {
+  isForeignKeyViolationForTable,
+  isForeignKeyReferenceError,
+  describeSequelizeError,
+};

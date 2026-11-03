@@ -1,133 +1,156 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Box, IconButton, InputAdornment, Typography } from "@mui/material";
-import {
-  LockOutlined,
-  Visibility,
-  VisibilityOff,
-  LockReset,
-} from "@mui/icons-material";
+import { Alert, Box, Button, Typography } from "@mui/material";
+import { ArrowBack, EmailOutlined, LockReset, Pin } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
-import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
-import { resetPassword, clearPasswordResetStatus } from "../../redux/slices/authSlice";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { forgotPassword, resetPassword, clearPasswordResetStatus } from "../../redux/slices/authSlice";
+import { OTP_LENGTH, RESEND_WAIT_SECONDS } from "../../constants/password";
 
 // Import reusable components
 import CustomTextField from "../../components/common/CustomTextField";
 import CustomButton from "../../components/common/CustomButton";
+import PasswordField from "../../components/auth/PasswordField";
+import PasswordChecklist from "../../components/auth/PasswordChecklist";
 
+const MISMATCH_MESSAGE = "The new password and the repeated password do not match.";
+
+// Step 2 of "Forgot password": the emailed 6-digit code plus the new
+// password. The user then signs in with the new password.
 const ResetPassword = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token");
+  const location = useLocation();
+  const cameFromCodeRequest = Boolean(location.state?.email);
 
-  const { loading, error, message } = useSelector((state) => state.auth.passwordReset);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ newPassword: "", confirmPassword: "" });
+  const { loading, error } = useSelector((state) => state.auth.passwordReset);
+  const [formData, setFormData] = useState({
+    Email: location.state?.email || "",
+    otp: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [notice, setNotice] = useState(location.state?.notice || "");
   const [formError, setFormError] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(cameFromCodeRequest ? RESEND_WAIT_SECONDS : 0);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     dispatch(clearPasswordResetStatus());
   }, [dispatch]);
 
+  useEffect(() => {
+    if (secondsLeft <= 0) return undefined;
+    const timer = setTimeout(() => setSecondsLeft((value) => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [secondsLeft]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
+    const nextValue = name === "otp" ? value.replace(/\D/g, "").slice(0, OTP_LENGTH) : value;
     setFormError("");
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
+  };
+
+  const handleResend = async () => {
+    setNotice("");
+    if (!formData.Email.trim()) {
+      setFormError("Enter your email first.");
+      return;
+    }
+    setResending(true);
+    const result = await dispatch(forgotPassword({ Email: formData.Email.trim() }));
+    setResending(false);
+    if (forgotPassword.fulfilled.match(result)) {
+      setNotice(result.payload);
+      setSecondsLeft(RESEND_WAIT_SECONDS);
+    }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    if (!token) {
-      setFormError("This reset link is missing its token. Please request a new one.");
-      return;
-    }
-
-    if (formData.newPassword.length < 8) {
-      setFormError("Password must be at least 8 characters long.");
-      return;
-    }
-
+    setNotice("");
     if (formData.newPassword !== formData.confirmPassword) {
-      setFormError("Passwords do not match.");
+      setFormError(MISMATCH_MESSAGE);
       return;
     }
 
-    const result = await dispatch(
-      resetPassword({ token, newPassword: formData.newPassword })
-    );
-
+    const result = await dispatch(resetPassword({ ...formData, Email: formData.Email.trim() }));
     if (resetPassword.fulfilled.match(result)) {
-      setSubmitted(true);
-      setTimeout(() => navigate("/login", { replace: true }), 2500);
+      navigate("/login", { replace: true, state: { notice: result.payload } });
     }
   };
+
+  const shownError = formError || error;
 
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate>
       <Typography variant="h4" fontWeight={700} sx={{ textAlign: "center", mb: 1 }}>
-        Reset Password
+        Set a New Password
       </Typography>
 
-      <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", mb: 4 }}>
-        Choose a new password for your account.
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", mb: 3 }}>
+        Enter the 6-digit code from the email and choose a new password.
       </Typography>
 
-      {!token && (
-        <Alert severity="warning" sx={{ mb: 3, borderRadius: 2 }}>
-          This reset link is invalid. Please request a new one from the Forgot Password page.
+      {notice && !shownError && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          {notice}
         </Alert>
       )}
 
-      {(formError || error) && (
-        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-          {formError || error}
+      {shownError && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {shownError}
         </Alert>
       )}
 
-      {submitted && message && (
-        <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }}>
-          {message} Redirecting you to login...
-        </Alert>
-      )}
+      <CustomTextField
+        label="Email"
+        name="Email"
+        type="email"
+        value={formData.Email}
+        onChange={handleChange}
+        icon={EmailOutlined}
+      />
 
-      {!submitted && (
-        <>
-          <CustomTextField
-            label="New Password"
-            name="newPassword"
-            type={showPassword ? "text" : "password"}
-            value={formData.newPassword}
-            onChange={handleChange}
-            icon={LockOutlined}
-            endAdornment={
-              <InputAdornment position="end">
-                <IconButton
-                  edge="end"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label="toggle password visibility"
-                >
-                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              </InputAdornment>
-            }
-          />
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+        <CustomTextField
+          label={`${OTP_LENGTH}-digit code`}
+          name="otp"
+          value={formData.otp}
+          onChange={handleChange}
+          icon={Pin}
+        />
+        <Button
+          variant="outlined"
+          onClick={handleResend}
+          disabled={secondsLeft > 0 || resending}
+          sx={{ mt: 1, whiteSpace: "nowrap", minWidth: 150, height: 56 }}
+        >
+          {secondsLeft > 0 ? `Send a new code (${secondsLeft}s)` : "Send a new code"}
+        </Button>
+      </Box>
 
-          <CustomTextField
-            label="Confirm New Password"
-            name="confirmPassword"
-            type={showPassword ? "text" : "password"}
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            icon={LockOutlined}
-          />
+      <PasswordField
+        label="New Password"
+        name="newPassword"
+        value={formData.newPassword}
+        onChange={handleChange}
+        autoComplete="new-password"
+      />
+      <PasswordChecklist password={formData.newPassword} email={formData.Email} />
 
-          <CustomButton loading={loading} loadingText="Resetting..." icon={LockReset} disabled={!token}>
-            Reset Password
-          </CustomButton>
-        </>
-      )}
+      <PasswordField
+        label="Repeat New Password"
+        name="confirmPassword"
+        value={formData.confirmPassword}
+        onChange={handleChange}
+        autoComplete="new-password"
+      />
+
+      <CustomButton loading={loading && !resending} loadingText="Saving..." icon={LockReset}>
+        Set New Password
+      </CustomButton>
 
       <Box sx={{ textAlign: "center", mt: 3 }}>
         <Typography
@@ -135,12 +158,16 @@ const ResetPassword = () => {
           to="/login"
           variant="body2"
           sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 0.5,
             color: "primary.main",
             fontWeight: 600,
             textDecoration: "none",
             "&:hover": { textDecoration: "underline" },
           }}
         >
+          <ArrowBack fontSize="inherit" />
           Back to Login
         </Typography>
       </Box>

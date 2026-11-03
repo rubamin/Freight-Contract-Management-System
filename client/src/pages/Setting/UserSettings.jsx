@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Box,
     Typography,
@@ -25,14 +25,20 @@ import {
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import * as userService from '../../services/userService';
-import * as moduleService from '../../services/moduleService';
 import * as accessRequestService from '../../services/accessRequestService';
+import api from '../../services/api';
 import { MODULE_KEYS, MODULE_LABELS } from '../../constants/modules';
 
 // NOTE: A light/dark theme toggle was intentionally left out of this page.
 // The app currently defines a single static MUI theme (src/styles/theme.js)
 // with no ThemeProvider-level mode switching, so there is nothing yet for a
 // toggle here to actually control. Add it once that infrastructure exists.
+
+// "Invoices: View, Add" for one permitted location.
+const describeLocationAccess = (location) => {
+    const actions = [location.CanView && 'View', location.CanAdd && 'Add', location.CanEdit && 'Edit'].filter(Boolean);
+    return `Invoices: ${actions.join(', ') || 'View'}`;
+};
 
 export default function UserSettings() {
     const [preferences, setPreferences] = useState({
@@ -49,13 +55,49 @@ export default function UserSettings() {
     // Generalized "Request Access" dialog state (task item 19): a user can
     // request access to any module (with View/Add/Edit) or to a specific
     // plant/location, not just a location as before.
-    const [allPlants, setAllPlants] = useState([]);
+    const [hierarchyMetadata, setHierarchyMetadata] = useState({
+        companies: [],
+        sbus: [],
+        plants: [],
+        locations: [],
+    });
     const [requestDialogOpen, setRequestDialogOpen] = useState(false);
     const [requestType, setRequestType] = useState('MODULE');
     const [requestModuleKey, setRequestModuleKey] = useState('');
     const [requestAction, setRequestAction] = useState('view');
-    const [requestPlantId, setRequestPlantId] = useState('');
+    const [requestLocationId, setRequestLocationId] = useState('');
     const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+    const locationOptions = useMemo(() => {
+        const companiesById = new Map(
+            hierarchyMetadata.companies.map((company) => [String(company.CompanyID), company])
+        );
+        const sbusById = new Map(
+            hierarchyMetadata.sbus.map((sbu) => [String(sbu.SBUID), sbu])
+        );
+        const hierarchyPlantsById = new Map(
+            hierarchyMetadata.plants.map((plant) => [String(plant.PlantHierarchyID), plant])
+        );
+        return hierarchyMetadata.locations.flatMap((location) => {
+            const hierarchyPlant = hierarchyPlantsById.get(String(location.PlantHierarchyID));
+            const sbu = hierarchyPlant && sbusById.get(String(hierarchyPlant.SBUID));
+            const company = sbu && companiesById.get(String(sbu.CompanyID));
+            const label = [
+                company?.CompanyName,
+                sbu?.SBUName,
+                hierarchyPlant?.PlantName,
+                location.LocationName,
+            ].filter(Boolean).join(' / ');
+            if (!label) return [];
+
+            return [{
+                key: location.LocationID,
+                LocationID: location.LocationID,
+                label,
+                disabled: false,
+            }];
+        });
+    }, [hierarchyMetadata]);
 
     const showSnackbar = (message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
@@ -63,9 +105,9 @@ export default function UserSettings() {
 
     const loadData = async () => {
         try {
-            const [preferencesRes, plantsRes] = await Promise.all([
+            const [preferencesRes, hierarchyRes] = await Promise.all([
                 userService.getPreferences(),
-                moduleService.getRecords({ apiGroup: 'masters', moduleName: 'plants', params: { pageSize: 1000 } }),
+                api.get('/settings/metadata'),
             ]);
             const fetchedPreferences = preferencesRes.data?.data;
 
@@ -73,7 +115,12 @@ export default function UserSettings() {
                 setPreferences(fetchedPreferences);
                 setSelectedPlantIds(fetchedPreferences.defaultPlantIds || []);
             }
-            setAllPlants(plantsRes.data?.data || []);
+            setHierarchyMetadata(hierarchyRes.data?.data || {
+                companies: [],
+                sbus: [],
+                plants: [],
+                locations: [],
+            });
         } catch (err) {
             console.error('Failed to load settings', err);
             showSnackbar('Failed to load your settings.', 'error');
@@ -100,7 +147,7 @@ export default function UserSettings() {
         setRequestType('MODULE');
         setRequestModuleKey('');
         setRequestAction('view');
-        setRequestPlantId('');
+        setRequestLocationId('');
         setRequestDialogOpen(true);
     };
 
@@ -109,7 +156,7 @@ export default function UserSettings() {
         try {
             const payload = requestType === 'MODULE'
                 ? { requestType: 'MODULE', moduleKey: requestModuleKey, requestedAction: requestAction }
-                : { requestType: 'LOCATION', plantId: requestPlantId };
+                : { requestType: 'LOCATION', locationId: requestLocationId, requestedAction: requestAction };
 
             await accessRequestService.createAccessRequest(payload);
             showSnackbar('Your request has been sent to the admin.');
@@ -204,10 +251,24 @@ export default function UserSettings() {
                             ))}
                         </List>
                     ) : (
-                        <Alert severity="info" sx={{ mb: 2 }}>
-                            You don't have access to any plants/locations yet. Ask your admin to
-                            grant access, or request it below.
-                        </Alert>
+                        !preferences.permittedHierarchyLocations?.length && (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                You don't have access to any plants/locations yet. Ask your admin to
+                                grant access, or request it below.
+                            </Alert>
+                        )
+                    )}
+                    {preferences.permittedHierarchyLocations?.length > 0 && (
+                        <List dense disablePadding>
+                            {preferences.permittedHierarchyLocations.map((location) => (
+                                <ListItem key={location.LocationID} disableGutters>
+                                    <ListItemText
+                                        primary={location.LocationName}
+                                        secondary={describeLocationAccess(location)}
+                                    />
+                                </ListItem>
+                            ))}
+                        </List>
                     )}
 
                     <Button
@@ -283,19 +344,43 @@ export default function UserSettings() {
                             </TextField>
                         </>
                     ) : (
-                        <TextField
-                            select
-                            fullWidth
-                            label="Plant / Location"
-                            value={requestPlantId}
-                            onChange={(e) => setRequestPlantId(e.target.value)}
-                        >
-                            {allPlants.map((plant) => (
-                                <MenuItem key={plant.PlantID} value={plant.PlantID}>
-                                    {plant.PlantName || plant.PlantCode}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                        <>
+                            <TextField
+                                select
+                                fullWidth
+                                label="Company / SBU / Plant / Location"
+                                value={requestLocationId}
+                                onChange={(e) => setRequestLocationId(e.target.value)}
+                                helperText="Choose the location you need access to."
+                                sx={{ mb: 2 }}
+                            >
+                                {locationOptions.map((option) => (
+                                    <MenuItem
+                                        key={option.key}
+                                        value={option.LocationID}
+                                        disabled={option.disabled}
+                                    >
+                                        {option.label}
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                            <TextField
+                                select
+                                fullWidth
+                                label="What do you need to do with its invoices?"
+                                value={requestAction}
+                                onChange={(e) => setRequestAction(e.target.value)}
+                            >
+                                <MenuItem value="view">View</MenuItem>
+                                <MenuItem value="add">Add (includes View)</MenuItem>
+                                <MenuItem value="edit">Edit (includes View)</MenuItem>
+                            </TextField>
+                            {locationOptions.length === 0 && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                    No active locations are available in the organization hierarchy.
+                                </Alert>
+                            )}
+                        </>
                     )}
                 </DialogContent>
                 <DialogActions>
@@ -305,7 +390,7 @@ export default function UserSettings() {
                         onClick={handleSubmitAccessRequest}
                         disabled={
                             isSubmittingRequest ||
-                            (requestType === 'MODULE' ? !requestModuleKey : !requestPlantId)
+                            (requestType === 'MODULE' ? !requestModuleKey : !requestLocationId)
                         }
                     >
                         Send Request

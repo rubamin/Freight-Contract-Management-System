@@ -38,12 +38,6 @@ router.put(
   userController.updatePreferences
 );
 
-router.post(
-  "/preferences/request-location-access",
-  authMiddleware,
-  userController.requestLocationAccess
-);
-
 // ==========================================
 //  ADMIN USER MANAGEMENT (task item 4) - all admin-only
 // ==========================================
@@ -51,7 +45,9 @@ router.get("/roles", authMiddleware, userController.getRoles);
 router.get("/", authMiddleware, requireAdmin, userController.listUsers);
 router.get("/:id", authMiddleware, requireAdmin, userController.getUserById);
 router.post("/", authMiddleware, requireAdmin, userController.createUser);
+router.post("/:id/email-password", authMiddleware, requireAdmin, userController.emailNewPassword);
 router.put("/:id", authMiddleware, requireAdmin, userController.updateUser);
 router.put("/:id/active", authMiddleware, requireAdmin, userController.setUserActive);
+router.delete("/:id/hard", authMiddleware, requireAdmin, userController.hardDeleteUser);
 
 module.exports = router;

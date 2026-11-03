@@ -12,6 +12,7 @@ import {
   TextField,
   Typography,
   Divider,
+  Chip,
   Tabs,
   Tab,
   Table,
@@ -39,12 +40,26 @@ import dayjs from "dayjs";
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
+import RateMatrixTemplateLink from "../../components/common/RateMatrixTemplateLink";
+import { UPLOAD_RULES, findUploadRuleViolation } from "../../constants/uploadRules";
+import UploadRequirementsHint from "../../components/common/UploadRequirementsHint";
+import { getSlabLabel, isAdditionalRateRow, isDomesticRateRow } from "../../utils/rateMatrix";
+import ContractTypeSheetsEditor from "../../components/contract/ContractTypeSheetsEditor";
+import { buildContractSheets, buildSheetsPayload } from "../../utils/contractSheets";
+import { CONTRACT_TYPES, DEFAULT_CONTRACT_TYPE, getContractTypeLabel } from "../../constants/contractTypes";
+import {
+  REMARK_MAX_LENGTH,
+  USER_REMARKS_LABEL,
+  SYSTEM_REMARKS_LABEL,
+  SYSTEM_REMARKS_HELPER,
+} from "../../constants/remarks";
 import {
   editContract,
   fetchContractById,
   fetchContractVendors,
 } from "../../redux/slices/contractSlice";
 import { getRecords, createRecord } from "../../services/moduleService";
+import { getRedirectDelay, getSaveSuccessMessage, isPendingApproval } from "../../utils/saveResult";
 import {
   DISPLAY_DATE_FORMAT,
   toDayjsValue,
@@ -54,10 +69,10 @@ import {
 const initialFormData = {
   VendorID: "",
   VendorPAN: "",
-  ContractNumber: "",
+  ContactPerson: "",
   ValidFrom: "",
   ValidTo: "",
-  Remarks: "",
+  UserRemarks: "",
   Status: "Draft",
 };
 
@@ -77,10 +92,10 @@ const buildFormDataFromContract = (contract) => {
   return {
     VendorID: contract?.VendorID || contract?.vendorID || "",
     VendorPAN: contract?.VendorPAN || contract?.vendor?.PANNo || contract?.vendorPan || "",
-    ContractNumber: contract?.ContractNo || contract?.contractNo || "",
+    ContactPerson: contract?.ContactPerson || contract?.vendor?.ContactPerson || "",
     ValidFrom: contract?.ContractStartDate || contract?.contractStartDate ? String(contract.ContractStartDate || contract.contractStartDate).slice(0, 10) : "",
     ValidTo: contract?.ContractEndDate || contract?.contractEndDate ? String(contract.ContractEndDate || contract.contractEndDate).slice(0, 10) : "",
-    Remarks: contract?.Remarks || contract?.remarks || "",
+    UserRemarks: contract?.UserRemarks || "",
     Status: normalizedStatus,
   };
 };
@@ -117,6 +132,11 @@ const EditContract = () => {
   const [newFreight, setNewFreight] = useState("");
 
   const [destinationOptions, setDestinationOptions] = useState([]);
+
+  // Editable sheets of FTL Inbound / PTL Outbound / Part Load contracts.
+  // Sent on save only when something was changed in them.
+  const [typeSheets, setTypeSheets] = useState({});
+  const [typeSheetsChanged, setTypeSheetsChanged] = useState(false);
   const [vehicleTypeOptions, setVehicleTypeOptions] = useState([]);
 
   useEffect(() => {
@@ -151,30 +171,19 @@ const EditContract = () => {
   useEffect(() => {
     if (contract) {
       setFormData(buildFormDataFromContract(contract));
+      setTypeSheets(buildContractSheets(contract));
+      setTypeSheetsChanged(false);
       const matrixData = contract.rateMatrix || contract.RateMatrix || contract.matrix || [];
       
       if (Array.isArray(matrixData) && matrixData.length > 0) {
         setRateMatrixRows(matrixData);
 
-        const sheet1RawData = matrixData.filter((row) => {
-          const wId = row.WeightID !== undefined ? row.WeightID : row.weightID;
-          const vId = row.VehicleTypeID !== undefined ? row.VehicleTypeID : row.vehicleTypeID;
-          return (wId !== null && wId !== undefined && wId !== "") || (vId === null || vId === undefined);
-        });
+        const sheet1RawData = matrixData.filter(isDomesticRateRow);
 
         if (sheet1RawData.length > 0) {
           const uniqueWeights = Array.from(
             new Set(
-              sheet1RawData
-                .map((row) => {
-                  const w = row.weight || row.Weight;
-                  if (w && (w.Weight !== undefined || w.weight !== undefined)) {
-                    const value = w.Weight !== undefined ? w.Weight : w.weight;
-                    return `${value} ${w.WeightUnit || "MT"}`.trim();
-                  }
-                  return row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate";
-                })
-                .filter(Boolean)
+              sheet1RawData.map(getSlabLabel).filter(Boolean)
             )
           );
 
@@ -183,10 +192,7 @@ const EditContract = () => {
             const destObj = row.destination || row.Destination;
             const cityName = destObj?.City || destObj?.city || `Destination ${row.DestinationID || row.destinationID || "N/A"}`;
             
-            const w = row.weight || row.Weight;
-            const weightLabel = (w && (w.Weight !== undefined || w.weight !== undefined)) 
-              ? `${w.Weight !== undefined ? w.Weight : w.weight} ${w.WeightUnit || "MT"}`.trim() 
-              : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
+            const weightLabel = getSlabLabel(row);
 
             if (!cityMap[cityName]) {
               cityMap[cityName] = { cityName, DestinationID: destObj?.DestinationID || destObj?.destinationID || row.DestinationID, rates: {} };
@@ -207,7 +213,6 @@ const EditContract = () => {
   const validateForm = () => {
     const nextErrors = {};
     if (!formData.VendorID) nextErrors.VendorID = "Vendor selection is required.";
-    if (!formData.ContractNumber.trim()) nextErrors.ContractNumber = "Contract Number is required.";
     if (!formData.ValidFrom) nextErrors.ValidFrom = "Validity From is required.";
     if (!formData.ValidTo) nextErrors.ValidTo = "Validity To is required.";
     if (formData.ValidFrom && formData.ValidTo && formData.ValidTo < formData.ValidFrom) {
@@ -237,18 +242,18 @@ const EditContract = () => {
       ...prev,
       VendorID: targetVendorId,
       VendorPAN: selectedVendorObj?.PANNo || selectedVendorObj?.PANNumber || selectedVendorObj?.VendorPAN || "",
+      ContactPerson: selectedVendorObj?.ContactPerson || selectedVendorObj?.VendorName || "",
     }));
     setErrors((prev) => ({ ...prev, VendorID: "" }));
   };
 
   const handleRateMatrixChange = (event) => {
     const file = event.target.files?.[0] || null;
-    const allowedExtensions = [".xls", ".xlsx"];
-    const extension = file?.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    const violation = findUploadRuleViolation(file, UPLOAD_RULES.CONTRACT_RATE_MATRIX);
 
-    if (file && !allowedExtensions.includes(extension)) {
+    if (violation) {
       setRateMatrix(null);
-      setErrors((prev) => ({ ...prev, RateMatrix: "Only XLS and XLSX files are allowed." }));
+      setErrors((prev) => ({ ...prev, RateMatrix: violation }));
       return;
     }
     setRateMatrix(file);
@@ -278,12 +283,7 @@ const EditContract = () => {
       prev.map((row) => {
         const destObj = row.destination || row.Destination;
         const cName = destObj?.City || destObj?.city;
-        const w = row.weight || row.Weight;
-        const wLabel = (w && (w.Weight !== undefined || w.weight !== undefined)) 
-          ? `${w.Weight !== undefined ? w.Weight : w.weight} ${w.WeightUnit || "MT"}`.trim() 
-          : (row.WeightID ? `Weight ID ${row.WeightID}` : "Standard Rate");
-
-        if (cName === cityName && wLabel === weightLabel) {
+        if (cName === cityName && isDomesticRateRow(row) && getSlabLabel(row) === weightLabel) {
           return { ...row, BaseRate: newRate };
         }
         return row;
@@ -370,7 +370,8 @@ const EditContract = () => {
         RateID: `temp_${Date.now()}_${w}`,
         destination: { DestinationID: destination.DestinationID || destination.id, City: destination.City || destination.cityName },
         DestinationID: destination.DestinationID || destination.id,
-        weight: { Weight: parseFloat(w) || 0, WeightUnit: "MT" },
+        slabLabel: w,
+        WeightID: null,
         VehicleTypeID: null,
         BaseRate: newWeightRates[w] || 0
       }));
@@ -403,36 +404,55 @@ const EditContract = () => {
     setOpenAddModal(false);
   };
 
+  const handleTypeSheetChange = (sheetId, sheet) => {
+    setTypeSheets((current) => ({ ...current, [sheetId]: sheet }));
+    setTypeSheetsChanged(true);
+  };
+
   const handleCancel = () => navigate("/contracts");
+
+  // The contract type is fixed once created. FTL Outbound rates are edited
+  // in the Sheet 1 / Sheet 2 grid, every other type in its own sheets.
+  const contractType = contract?.ContractType || DEFAULT_CONTRACT_TYPE;
+  const isFtlOutbound = contractType === CONTRACT_TYPES.FTL_OUTBOUND;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validateForm()) return;
 
+    const sendTypeSheets = !isFtlOutbound && !rateMatrix && typeSheetsChanged;
+    const typeSheetsResult = sendTypeSheets ? buildSheetsPayload(contractType, typeSheets) : null;
+    if (typeSheetsResult?.errors.length) {
+      setSnackbar({ open: true, severity: "error", message: typeSheetsResult.errors.slice(0, 5).join(" ") });
+      return;
+    }
+
     const payload = new FormData();
     Object.keys(formData).forEach((key) => {
-      if (key === "ContractNumber") {
-        payload.append("ContractNo", formData[key]);
-      } else {
-        payload.append(key, formData[key]);
-      }
+      payload.append(key, formData[key]);
     });
 
     if (rateMatrix) {
       payload.append("rateMatrix", rateMatrix);
     }
 
-    payload.append("editedRates", JSON.stringify(rateMatrixRows));
+    if (isFtlOutbound) {
+      payload.append("editedRates", JSON.stringify(rateMatrixRows));
+    }
+
+    if (typeSheetsResult) {
+      payload.append("editedSheets", JSON.stringify(typeSheetsResult.payload));
+    }
 
     const result = await dispatch(editContract({ id, contractData: payload }));
 
     if (editContract.fulfilled.match(result)) {
       setSnackbar({
         open: true,
-        severity: "success",
-        message: "Contract and Matrix updated successfully.",
+        severity: isPendingApproval(result.payload) ? "info" : "success",
+        message: getSaveSuccessMessage(result.payload, "Contract and Matrix updated successfully."),
       });
-      setTimeout(() => navigate("/contracts"), 1000);
+      setTimeout(() => navigate("/contracts"), getRedirectDelay(result.payload));
       return;
     }
 
@@ -448,10 +468,7 @@ const EditContract = () => {
     dest.cityName.toLowerCase().includes(searchQuery1.toLowerCase())
   );
 
-  const sheet2Rows = rateMatrixRows.filter((r) => {
-    const vId = r.VehicleTypeID !== undefined ? r.VehicleTypeID : r.vehicleTypeID;
-    return vId !== null && vId !== undefined && vId !== "";
-  });
+  const sheet2Rows = rateMatrixRows.filter(isAdditionalRateRow);
 
   const filteredSheet2 = sheet2Rows.filter((row) => {
     const destObj = row.destination || row.Destination;
@@ -469,6 +486,8 @@ const EditContract = () => {
       ? sheet1Destinations.map((d) => d.cityName.toUpperCase())
       : sheet2Rows.map((r) => (r.destination?.City || r.Destination?.City || "").toUpperCase())
   );
+
+  const destinationCityNames = [...new Set(destinationOptions.map((d) => d.City || d.cityName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   const availableMasterDestinations = destinationOptions.filter(
     (d) => (d.City || d.cityName) && !existingCityNames.has((d.City || d.cityName).toUpperCase())
@@ -488,9 +507,10 @@ const EditContract = () => {
           />
 
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }} noValidate>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: "text.primary" }}>
+            <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, color: "text.primary" }}>
               Contract Basic Parameters
             </Typography>
+            <Chip color="primary" variant="outlined" label={getContractTypeLabel(contractType)} sx={{ mb: 3 }} />
 
             <Box
               sx={{
@@ -535,12 +555,11 @@ const EditContract = () => {
               <TextField
                 fullWidth
                 variant="outlined"
-                label="Contract Number"
-                name="ContractNumber"
-                value={formData.ContractNumber}
+                label="Contact Person"
+                name="ContactPerson"
+                placeholder="Enter Contact Person Name"
+                value={formData.ContactPerson}
                 onChange={handleChange}
-                error={Boolean(errors.ContractNumber)}
-                helperText={errors.ContractNumber}
                 slotProps={{
                   inputLabel: { shrink: true },
                 }}
@@ -613,25 +632,56 @@ const EditContract = () => {
                   <Typography noWrap variant="body2">
                     {rateMatrix ? rateMatrix.name : contract?.RateMatrixFileName ? `Replace: ${contract.RateMatrixFileName}` : "Upload New Excel Matrix"}
                   </Typography>
-                  <input hidden type="file" accept=".xls,.xlsx" onChange={handleRateMatrixChange} />
+                  <input hidden type="file" accept={UPLOAD_RULES.CONTRACT_RATE_MATRIX.accept} onChange={handleRateMatrixChange} />
                 </Button>
+                <UploadRequirementsHint rule={UPLOAD_RULES.CONTRACT_RATE_MATRIX} sx={{ mt: 0.5, mx: 1 }} />
+                <RateMatrixTemplateLink contractType={contractType} />
               </Box>
 
               <TextField
                 fullWidth
                 variant="outlined"
-                label="General Remarks"
-                name="Remarks"
-                value={formData.Remarks}
+                label={USER_REMARKS_LABEL}
+                name="UserRemarks"
+                value={formData.UserRemarks}
                 onChange={handleChange}
                 slotProps={{
                   inputLabel: { shrink: true },
+                  htmlInput: { maxLength: REMARK_MAX_LENGTH },
                 }}
               />
             </Box>
 
+            <TextField
+              fullWidth
+              disabled
+              variant="outlined"
+              sx={{ mt: 3 }}
+              label={SYSTEM_REMARKS_LABEL}
+              value={contract?.Remarks || "-"}
+              helperText={SYSTEM_REMARKS_HELPER}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
             <Divider sx={{ my: 4 }} />
 
+            {!isFtlOutbound && (
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
+                  Contract Rate Matrix (Sheets Preview & Edit)
+                </Typography>
+                <ContractTypeSheetsEditor
+                  contractType={contractType}
+                  sheets={typeSheets}
+                  destinationOptions={destinationCityNames}
+                  onSheetChange={handleTypeSheetChange}
+                  replacedByUpload={Boolean(rateMatrix)}
+                />
+              </Box>
+            )}
+
+            {isFtlOutbound && (
+            <>
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 600, color: "text.primary" }}>
                 Contract Rate Matrix (Sheets Preview & Edit)
@@ -849,6 +899,9 @@ const EditContract = () => {
                   rowsPerPageOptions={[10, 25, 50]}
                 />
               </Box>
+            )}
+
+            </>
             )}
 
             <Box mt={5} sx={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>

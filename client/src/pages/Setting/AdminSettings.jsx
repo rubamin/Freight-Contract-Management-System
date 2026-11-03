@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    Box, Typography, TextField, Button, Paper, Grid, Autocomplete, Alert, IconButton, Tooltip,
-    FormControlLabel, Checkbox, Card, Accordion, AccordionSummary, AccordionDetails, Chip, InputAdornment
+    Box, Typography, TextField, Button, Paper, Grid, Alert, IconButton, Tooltip,
+    Accordion, AccordionSummary, AccordionDetails, Chip, InputAdornment
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BusinessIcon from '@mui/icons-material/Business';
@@ -17,6 +17,8 @@ import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import PageHeader from '../../components/common/PageHeader';
 import StatCard from '../../components/common/StatCard';
 import api from '../../services/api';
+import ApprovalWorkflowEditor from '../../components/approvalWorkflow/ApprovalWorkflowEditor';
+import { STEP_TYPES } from '../../constants/approvalWorkflow';
 
 // Human-friendly copy shown at the top of the right-hand form panel,
 // keyed by targetType, so it's always obvious *why* the form is showing
@@ -39,14 +41,19 @@ const FORM_COPY = {
         add: { title: 'Add a Location', subtitle: 'A location is the most specific point in the hierarchy — this is what gets selected when uploading an invoice.' },
         edit: { title: 'Edit Location', subtitle: 'Rename this location.' },
     },
-    approval: {
-        add: { title: 'Configure Approvers', subtitle: 'Choose who receives discrepancy/audit emails for invoices uploaded against this location.' },
-        edit: { title: 'Configure Approvers', subtitle: 'Choose who receives discrepancy/audit emails for invoices uploaded against this location.' },
+    workflow: {
+        add: { title: 'Approval Workflow', subtitle: 'Choose who approves invoices entered at this location, in which order.' },
+        edit: { title: 'Approval Workflow', subtitle: 'Choose who approves invoices entered at this location, in which order.' },
     },
 };
 
+// One line per step for the tree, e.g. "1. HOD Approval: Ravi, Meena".
+const describeWorkflowSteps = (workflow) => (workflow?.steps || []).map((step) =>
+    `${step.StepOrder}. ${step.StepName}${step.StepType === STEP_TYPES.NOTIFY ? ' (notify)' : ''}: ${step.users.map((user) => user.FullName).join(', ')}`
+);
+
 export default function AdminSettings() {
-    const [metadata, setMetadata] = useState({ companies: [], sbus: [], plants: [], locations: [], users: [], approvalConfigs: [] });
+    const [metadata, setMetadata] = useState({ companies: [], sbus: [], plants: [], locations: [], users: [], workflows: [] });
     const [message, setMessage] = useState({ type: '', text: '' });
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -56,15 +63,8 @@ export default function AdminSettings() {
     const [parentID, setParentID] = useState('');
     const [itemName, setItemName] = useState('');
 
-    const [approvalConfig, setApprovalConfig] = useState({
-        locationID: '',
-        primaryUserID: '',
-        primaryEmail: '',
-        optionalUserID: '',
-        optionalEmail: '',
-        isPrimaryActive: true,
-        isOptionalActive: false
-    });
+    // Location whose approval workflow is open in the right panel.
+    const [workflowTarget, setWorkflowTarget] = useState(null);
 
     useEffect(() => {
         fetchMetadata();
@@ -84,23 +84,15 @@ export default function AdminSettings() {
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         try {
-            let endpoint = '/settings/master';
-            let payload = {};
+            const payload = {
+                type: targetType,
+                name: itemName,
+                parentID: parentID || null,
+                mode: formMode,
+                id: activeId
+            };
 
-            if (targetType === 'approval') {
-                endpoint = '/settings/approval-config';
-                payload = approvalConfig;
-            } else {
-                payload = {
-                    type: targetType,
-                    name: itemName,
-                    parentID: parentID || null,
-                    mode: formMode,
-                    id: activeId
-                };
-            }
-
-            const res = await api.post(endpoint, payload);
+            const res = await api.post('/settings/master', payload);
             if (res.data.success) {
                 setMessage({ type: 'success', text: res.data.message });
                 setItemName('');
@@ -137,16 +129,22 @@ export default function AdminSettings() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [term, metadata]);
 
-    const formCopy = FORM_COPY[targetType]?.[targetType === 'approval' ? 'add' : formMode] || FORM_COPY.company.add;
+    const formCopy = FORM_COPY[targetType]?.[formMode] || FORM_COPY.company.add;
+    const formTitle = targetType === 'workflow' && workflowTarget ? `${formCopy.title}: ${workflowTarget.location.LocationName}` : formCopy.title;
+
+    const handleWorkflowSaved = (text) => {
+        setMessage({ type: 'success', text });
+        fetchMetadata();
+    };
 
     return (
         <Box>
             <PageHeader
-                title="Settings & Hierarchy"
-                subtitle="Manage your organization structure (Company → SBU → Plant → Location) and configure who receives approval/discrepancy emails at each location."
+                title="Hierarchy & Approval Workflow"
+                subtitle="Manage your organization structure (Company → SBU → Plant → Location) and who approves the invoices entered at each location."
                 breadcrumbs={[
                     { label: 'Dashboard', path: '/dashboard' },
-                    { label: 'Settings & Hierarchy' },
+                    { label: 'Hierarchy & Approval Workflow' },
                 ]}
             />
 
@@ -267,7 +265,7 @@ export default function AdminSettings() {
 
                                                             {/* Locations under Plant */}
                                                             {metadata.locations.filter(l => l.PlantHierarchyID === p.PlantHierarchyID).map(l => {
-                                                                const assignedConfig = metadata.approvalConfigs?.find(ac => ac.LocationID === l.LocationID);
+                                                                const stepLines = describeWorkflowSteps(metadata.workflows?.find(w => w.locationId === l.LocationID));
                                                                 return (
                                                                     <Box key={l.LocationID} sx={{ pl: 1.5, borderLeft: '3px solid #fca5a5', ml: 1, my: 1 }}>
                                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 1, pl: 1, bgcolor: '#fef2f2', borderRadius: 1 }}>
@@ -275,40 +273,28 @@ export default function AdminSettings() {
                                                                                 <Typography variant="body2" sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                                     <LocationOnIcon fontSize="small" color="error" /> {l.LocationName}
                                                                                 </Typography>
-                                                                                {assignedConfig ? (
+                                                                                {stepLines.length ? (
                                                                                     <Box sx={{ pl: 3, mt: 0.5 }}>
-                                                                                        {assignedConfig.PrimaryUserID && (
-                                                                                            <Typography variant="caption" color="textSecondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                                                                <PersonPinIcon fontSize="small" color={assignedConfig.IsPrimaryActive ? "success" : "disabled"} /> Primary: {assignedConfig.PrimaryUserName} ({assignedConfig.IsPrimaryActive ? 'Active' : 'Inactive'})
+                                                                                        {stepLines.map((line) => (
+                                                                                            <Typography key={line} variant="caption" color="textSecondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                                                                <PersonPinIcon fontSize="small" color="success" /> {line}
                                                                                             </Typography>
-                                                                                        )}
-                                                                                        {assignedConfig.OptionalUserID && (
-                                                                                            <Typography variant="caption" color="textSecondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                                                                <PersonPinIcon fontSize="small" color={assignedConfig.IsOptionalActive ? "success" : "disabled"} /> Optional: {assignedConfig.OptionalUserName} ({assignedConfig.IsOptionalActive ? 'Active' : 'Inactive'})
-                                                                                            </Typography>
-                                                                                        )}
+                                                                                        ))}
                                                                                     </Box>
                                                                                 ) : (
-                                                                                    <Typography variant="caption" sx={{ pl: 3, color: '#9ca3af' }}>No approvers configured yet</Typography>
+                                                                                    <Typography variant="caption" sx={{ pl: 3, color: '#9ca3af' }}>No approval workflow yet</Typography>
                                                                                 )}
                                                                             </Box>
                                                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                                                                                 <Tooltip title="Edit Location"><IconButton size="small" onClick={() => { setTargetType('location'); setFormMode('edit'); setActiveId(l.LocationID); setItemName(l.LocationName); }}><EditIcon fontSize="small"/></IconButton></Tooltip>
-                                                                                <Tooltip title="Configure Approvers">
+                                                                                <Tooltip title="Configure Approval Workflow">
                                                                                     <IconButton
                                                                                         size="small"
                                                                                         color="secondary"
                                                                                         onClick={() => {
-                                                                                            setTargetType('approval');
-                                                                                            setApprovalConfig({
-                                                                                                locationID: l.LocationID,
-                                                                                                primaryUserID: assignedConfig?.PrimaryUserID || '',
-                                                                                                primaryEmail: assignedConfig?.PrimaryEmail || '',
-                                                                                                optionalUserID: assignedConfig?.OptionalUserID || '',
-                                                                                                optionalEmail: assignedConfig?.OptionalEmail || '',
-                                                                                                isPrimaryActive: assignedConfig ? Boolean(assignedConfig.IsPrimaryActive) : true,
-                                                                                                isOptionalActive: assignedConfig ? Boolean(assignedConfig.IsOptionalActive) : false
-                                                                                            });
+                                                                                            setTargetType('workflow');
+                                                                                            setFormMode('edit');
+                                                                                            setWorkflowTarget({ location: l, plantName: p.PlantName });
                                                                                         }}
                                                                                     >
                                                                                         <PersonPinIcon fontSize="small" />
@@ -341,110 +327,40 @@ export default function AdminSettings() {
                                 <SettingsSuggestIcon />
                             </Box>
                             <Box>
-                                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>{formCopy.title}</Typography>
+                                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>{formTitle}</Typography>
                                 <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.75)' }}>{formCopy.subtitle}</Typography>
                             </Box>
                         </Box>
 
                         <Box sx={{ p: 4 }}>
-                            <form onSubmit={handleFormSubmit}>
-                                <Grid container spacing={3}>
-                                    {targetType !== 'approval' ? (
+                            {targetType === 'workflow' && workflowTarget ? (
+                                <ApprovalWorkflowEditor
+                                    location={workflowTarget.location}
+                                    plantName={workflowTarget.plantName}
+                                    users={metadata.users}
+                                    onSaved={handleWorkflowSaved}
+                                    onError={(text) => setMessage({ type: 'error', text })}
+                                />
+                            ) : (
+                                <form onSubmit={handleFormSubmit}>
+                                    <Grid container spacing={3}>
                                         <Grid item xs={12}>
-                                            <TextField 
-                                                fullWidth 
-                                                label={`${targetType.toUpperCase()} Name *`} 
-                                                value={itemName} 
-                                                onChange={(e) => setItemName(e.target.value)} 
-                                                required 
+                                            <TextField
+                                                fullWidth
+                                                label={`${targetType.toUpperCase()} Name *`}
+                                                value={itemName}
+                                                onChange={(e) => setItemName(e.target.value)}
+                                                required
                                             />
                                         </Grid>
-                                    ) : (
-                                        <>
-                                            {/* Primary Approver Card Section */}
-                                            <Grid item xs={12}>
-                                                <Card variant="outlined" sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 2 }}>
-                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2, color: '#1e293b' }}>Primary Approver</Typography>
-                                                    <Grid container spacing={2}>
-                                                        <Grid item xs={12}>
-                                                            <Autocomplete
-                                                                options={metadata.users}
-                                                                getOptionLabel={(option) => option.FullName}
-                                                                value={metadata.users.find(u => u.UserID === approvalConfig.primaryUserID) || null}
-                                                                onChange={(event, newValue) => {
-                                                                    setApprovalConfig({
-                                                                        ...approvalConfig,
-                                                                        primaryUserID: newValue ? newValue.UserID : '',
-                                                                        primaryEmail: newValue ? newValue.Email : ''
-                                                                    });
-                                                                }}
-                                                                renderInput={(params) => <TextField {...params} label="Select Primary User" required />}
-                                                            />
-                                                        </Grid>
-                                                        <Grid item xs={12}>
-                                                            <TextField fullWidth label="Primary User Mail ID" value={approvalConfig.primaryEmail} InputProps={{ readOnly: true }} />
-                                                        </Grid>
-                                                        <Grid item xs={12}>
-                                                            <FormControlLabel 
-                                                                control={
-                                                                    <Checkbox 
-                                                                        checked={approvalConfig.isPrimaryActive} 
-                                                                        onChange={(e) => setApprovalConfig({...approvalConfig, isPrimaryActive: e.target.checked})} 
-                                                                    />
-                                                                } 
-                                                                label="Active for sending mail (Primary)" 
-                                                            />
-                                                        </Grid>
-                                                    </Grid>
-                                                </Card>
-                                            </Grid>
 
-                                            {/* Optional Approver Card Section */}
-                                            <Grid item xs={12} sx={{ mt: 1 }}>
-                                                <Card variant="outlined" sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 2 }}>
-                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2, color: '#1e293b' }}>Optional Approver (Optional)</Typography>
-                                                    <Grid container spacing={2}>
-                                                        <Grid item xs={12}>
-                                                            <Autocomplete
-                                                                options={metadata.users}
-                                                                getOptionLabel={(option) => option.FullName}
-                                                                value={metadata.users.find(u => u.UserID === approvalConfig.optionalUserID) || null}
-                                                                onChange={(event, newValue) => {
-                                                                    setApprovalConfig({
-                                                                        ...approvalConfig,
-                                                                        optionalUserID: newValue ? newValue.UserID : '',
-                                                                        optionalEmail: newValue ? newValue.Email : ''
-                                                                    });
-                                                                }}
-                                                                renderInput={(params) => <TextField {...params} label="Select Optional User" />}
-                                                            />
-                                                        </Grid>
-                                                        <Grid item xs={12}>
-                                                            <TextField fullWidth label="Optional User Mail ID" value={approvalConfig.optionalEmail} InputProps={{ readOnly: true }} />
-                                                        </Grid>
-                                                        <Grid item xs={12}>
-                                                            <FormControlLabel 
-                                                                control={
-                                                                    <Checkbox 
-                                                                        checked={approvalConfig.isOptionalActive} 
-                                                                        onChange={(e) => setApprovalConfig({...approvalConfig, isOptionalActive: e.target.checked})} 
-                                                                    />
-                                                                } 
-                                                                label="Active for sending mail (Optional)" 
-                                                            />
-                                                        </Grid>
-                                                    </Grid>
-                                                </Card>
-                                            </Grid>
-                                        </>
-                                    )}
-
-                                    <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
-                                        <Button variant="outlined" color="inherit" onClick={() => { setItemName(''); }} sx={{ textTransform: 'none' }}>Cancel</Button>
-                                        <Button type="submit" variant="contained" startIcon={<SaveIcon />} sx={{ textTransform: 'none', fontWeight: 600 }}>Save Changes</Button>
+                                        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
+                                            <Button variant="outlined" color="inherit" onClick={() => { setItemName(''); }} sx={{ textTransform: 'none' }}>Cancel</Button>
+                                            <Button type="submit" variant="contained" startIcon={<SaveIcon />} sx={{ textTransform: 'none', fontWeight: 600 }}>Save Changes</Button>
+                                        </Grid>
                                     </Grid>
-                                </Grid>
-                            </form>
+                                </form>
+                            )}
                         </Box>
                     </Paper>
                 </Box>

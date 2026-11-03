@@ -32,7 +32,6 @@ import PageHeader from "../../components/common/PageHeader";
 import StatCard from "../../components/common/StatCard";
 import PageCard from "../../components/common/PageCard";
 import SearchPanel from "../../components/common/SearchPanel";
-import TableToolbar from "../../components/common/TableToolbar";
 import StatusChip from "../../components/common/StatusChip";
 import SkeletonTable from "../../components/common/SkeletonTable";
 import EmptyState from "../../components/common/EmptyState";

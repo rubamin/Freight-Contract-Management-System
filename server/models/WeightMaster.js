@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+const { REMARK_COLUMNS } = require("./remarkColumns");
 
 const WeightMaster = sequelize.define(
   "WeightMaster",
@@ -26,6 +27,7 @@ const WeightMaster = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    ...REMARK_COLUMNS,
   },
   {
     tableName: "WeightMaster",

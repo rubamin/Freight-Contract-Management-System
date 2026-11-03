@@ -1,6 +1,9 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 const contractController = require("../controllers/contract.controller");
+const { holdForApproval } = require("../middleware/masterApprovalMiddleware");
+const { MODULE_KEYS } = require("../constants/modules");
+const { MASTER_ACTIONS } = require("../constants/masterApproval");
 
 const router = express.Router();
 
@@ -16,14 +19,16 @@ router.get("/:id", contractController.getContract);
 // 3. Create a new contract alongside the Excel rate matrix sheet parsing engine
 router.post(
   "/",
-  contractController.uploadExcel, 
+  contractController.uploadExcel,
+  holdForApproval(MODULE_KEYS.CONTRACT_MASTER, MASTER_ACTIONS.ADD),
   contractController.createContract
 );
 
 // 4. Update an existing contract and re-process the matrix entries if a new sheet is provided
 router.put(
   "/:id",
-  contractController.uploadExcel, 
+  contractController.uploadExcel,
+  holdForApproval(MODULE_KEYS.CONTRACT_MASTER, MASTER_ACTIONS.EDIT),
   contractController.updateContract
 );
 

@@ -1,21 +1,23 @@
 import React, { useState } from "react";
-import { Alert, Box, IconButton, InputAdornment, Typography } from "@mui/material";
-import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, Login as LoginIcon } from "@mui/icons-material";
+import { Alert, Box, Typography } from "@mui/material";
+import { EmailOutlined, Login as LoginIcon } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { useLocation, useNavigate, Link as RouterLink } from "react-router-dom";
 import { loginUser } from "../../redux/slices/authSlice";
 
 // Import reusable components
 import CustomTextField from "../../components/common/CustomTextField";
 import CustomButton from "../../components/common/CustomButton";
+import PasswordField from "../../components/auth/PasswordField";
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { loading, error } = useSelector((state) => state.auth);
-  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ Email: "", Password: "" });
+  const notice = location.state?.notice;
 
   // Handle input changes dynamically
   const handleChange = (event) => {
@@ -23,12 +25,14 @@ const Login = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle form submission
+  // Handle form submission. A user signing in with a temporary password
+  // must set their own password first.
   const handleSubmit = async (event) => {
     event.preventDefault();
     const result = await dispatch(loginUser(formData));
     if (loginUser.fulfilled.match(result)) {
-      navigate("/dashboard", { replace: true });
+      const nextPath = result.payload.user?.MustChangePassword ? "/set-password" : "/dashboard";
+      navigate(nextPath, { replace: true });
     }
   };
 
@@ -41,6 +45,12 @@ const Login = () => {
       <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", mb: 4 }}>
         Sign in to continue to your dashboard
       </Typography>
+
+      {notice && !error && (
+        <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }}>
+          {notice}
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
@@ -58,25 +68,13 @@ const Login = () => {
         icon={EmailOutlined}
       />
 
-      {/* Reusable Password Field with Visibility Toggle */}
-      <CustomTextField
+      {/* Password Field with Visibility Toggle */}
+      <PasswordField
         label="Password"
         name="Password"
-        type={showPassword ? "text" : "password"}
         value={formData.Password}
         onChange={handleChange}
-        icon={LockOutlined}
-        endAdornment={
-          <InputAdornment position="end">
-            <IconButton
-              edge="end"
-              onClick={() => setShowPassword((prev) => !prev)}
-              aria-label="toggle password visibility"
-            >
-              {showPassword ? <VisibilityOff /> : <Visibility />}
-            </IconButton>
-          </InputAdornment>
-        }
+        autoComplete="current-password"
       />
 
       <Box sx={{ textAlign: "right", mt: 1 }}>

@@ -7,20 +7,28 @@ import {
   IconButton,
   Chip,
 } from "@mui/material";
-import { Edit, Search, ToggleOn, ToggleOff } from "@mui/icons-material";
+import { DeleteForever, Edit, ForwardToInbox, Search, ToggleOn, ToggleOff } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
 import PageHeader from "../../components/common/PageHeader";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import CustomDataGrid from "../../components/common/CustomDataGrid";
+import DeleteDialog from "../../components/common/DeleteDialog";
+import EmailPasswordDialog from "../../components/users/EmailPasswordDialog";
+import useAuth from "../../hooks/useAuth";
 import useDebounce from "../../hooks/useDebounce";
 import usePermissions from "../../hooks/usePermissions";
 import * as userService from "../../services/userService";
 
 const UserList = () => {
   const navigate = useNavigate();
-  const { canEdit, loaded: permissionsLoaded } = usePermissions();
+  const { canEdit, isAdmin, loaded: permissionsLoaded } = usePermissions();
+  const { user: currentUser } = useAuth();
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [hardDeleting, setHardDeleting] = useState(false);
+  const [userToEmail, setUserToEmail] = useState(null);
+  const [sendingPassword, setSendingPassword] = useState(false);
 
   const [users, setUsers] = useState([]);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -76,11 +84,52 @@ const UserList = () => {
     }
   };
 
+  const handleHardDeleteConfirm = async () => {
+    setHardDeleting(true);
+    try {
+      const res = await userService.hardDeleteUser(userToDelete.UserID);
+      setSnackbar({ open: true, severity: "success", message: res.data.message });
+      loadUsers();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        severity: "error",
+        message: err.response?.data?.message || "Failed to permanently delete the user.",
+      });
+    } finally {
+      setHardDeleting(false);
+      setUserToDelete(null);
+    }
+  };
+
+  const handleEmailPasswordConfirm = async () => {
+    setSendingPassword(true);
+    try {
+      const res = await userService.emailNewPassword(userToEmail.UserID);
+      setSnackbar({ open: true, severity: "success", message: res.data.message });
+      loadUsers();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        severity: "error",
+        message: err.response?.data?.message || "Failed to e-mail a new password.",
+      });
+    } finally {
+      setSendingPassword(false);
+      setUserToEmail(null);
+    }
+  };
+
+  const canEmailPassword = (row) => permissionsLoaded && isAdmin && row.IsActive;
+
+  const canHardDelete = (row) =>
+    permissionsLoaded && isAdmin && row.UserID !== currentUser?.UserID;
+
   const columns = [
     {
       field: "Action",
       headerName: "Action",
-      width: 110,
+      width: 190,
       sortable: false,
       renderCell: (params) => (
         <>
@@ -98,6 +147,16 @@ const UserList = () => {
           >
             {params.row.IsActive ? <ToggleOff fontSize="small" /> : <ToggleOn fontSize="small" />}
           </IconButton>
+          {canEmailPassword(params.row) && (
+            <IconButton color="primary" title="E-mail new password" onClick={() => setUserToEmail(params.row)}>
+              <ForwardToInbox fontSize="small" />
+            </IconButton>
+          )}
+          {canHardDelete(params.row) && (
+            <IconButton color="error" title="Delete permanently" onClick={() => setUserToDelete(params.row)}>
+              <DeleteForever fontSize="small" />
+            </IconButton>
+          )}
         </>
       ),
     },
@@ -114,13 +173,18 @@ const UserList = () => {
     {
       field: "IsActive",
       headerName: "Status",
-      width: 120,
+      width: 260,
       renderCell: (params) => (
-        <Chip
-          label={params.value ? "Active" : "Inactive"}
-          color={params.value ? "success" : "error"}
-          size="small"
-        />
+        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", height: "100%" }}>
+          <Chip
+            label={params.value ? "Active" : "Inactive"}
+            color={params.value ? "success" : "error"}
+            size="small"
+          />
+          {params.row.MustChangePassword && (
+            <Chip label="Password not set yet" color="warning" size="small" variant="outlined" />
+          )}
+        </Box>
       ),
     },
   ];
@@ -166,6 +230,26 @@ const UserList = () => {
           }}
         />
       </Paper>
+
+      {isAdmin && (
+        <DeleteDialog
+          open={Boolean(userToDelete)}
+          title="Permanently Delete User"
+          message={`Permanently delete ${userToDelete?.FullName || userToDelete?.Email || "this user"}? Their permissions and preferences are removed too. Users referenced by contracts, invoices or approvals cannot be deleted - deactivate them instead.`}
+          loading={hardDeleting}
+          onClose={() => setUserToDelete(null)}
+          onConfirm={handleHardDeleteConfirm}
+        />
+      )}
+
+      {isAdmin && (
+        <EmailPasswordDialog
+          user={userToEmail}
+          sending={sendingPassword}
+          onClose={() => setUserToEmail(null)}
+          onConfirm={handleEmailPasswordConfirm}
+        />
+      )}
 
       <LoadingOverlay open={loading} message="Loading users..." />
 

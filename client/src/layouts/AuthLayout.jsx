@@ -66,7 +66,7 @@ const AuthLayout = () => {
           </Typography>
         </Stack>
 
-        {/* Render child authentication routes (Login, Register, etc.) */}
+        {/* Render child authentication routes (Login, Forgot / Set password) */}
         <Outlet />
       </Paper>
     </Box>

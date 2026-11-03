@@ -1,11 +1,31 @@
 const sequelize = require("../config/database");
 const contractRepository = require("../repositories/contract.repository");
-const xlsx = require("xlsx");
 const { CONTRACT_STATUS } = require("../constants/contractStatus");
+const { DEFAULT_WEIGHT_UNIT, MAX_REPORTED_IMPORT_ERRORS } = require("../constants/rateMatrixTemplate");
+const { parseRateMatrixWorkbook } = require("../utils/rateMatrixExcel");
+const { parseWeightSlab, parseVehicleCapacity } = require("../utils/weightSlab");
+const { parseContractTypeWorkbook } = require("../utils/contractTypeExcel");
+const { parseContractSheets } = require("../utils/contractSheetPayload");
+const {
+  CONTRACT_TYPES,
+  DEFAULT_CONTRACT_TYPE,
+  CONTRACT_TYPE_LABELS,
+  normalizeContractType,
+} = require("../constants/contractTypes");
+const { buildCreatedRemark, buildUpdatedRemark, normalizeUserRemark } = require("../utils/systemRemarks");
+
+// Imported / manually added destinations are created under this state,
+// matching the existing Destination Master behaviour.
+const DEFAULT_DESTINATION_STATE = "Gujarat";
+
+// Contract Number is no longer entered on the form, so a unique internal
+// number is generated once when a contract is created.
+const AUTO_CONTRACT_NO_PREFIX = "CT";
+
+const generateContractNo = () => `${AUTO_CONTRACT_NO_PREFIX}-${Date.now()}`;
 
 const REQUIRED_MESSAGES = {
   VendorID: "Vendor selection is required.",
-  ContractNo: "Contract Number is required.",
   ContractStartDate: "Valid From is required.",
   ContractEndDate: "Valid To is required.",
   RateMatrixFileName: "Excel rate matrix file is required."
@@ -14,13 +34,21 @@ const REQUIRED_MESSAGES = {
 const normalizeContractData = (data, file = null, existingContract = null) => {
   const current = existingContract || {};
 
+  // The contract type is chosen once when the contract is created and
+  // cannot change afterwards - its rate matrix layout depends on it.
+  const requestedType = data.ContractType || data.contractType;
+  const ContractType = current.ContractType
+    || (requestedType ? normalizeContractType(requestedType) : DEFAULT_CONTRACT_TYPE);
+
   return {
+    ContractType,
     VendorID: data.VendorID || data.VendorId || current.VendorID,
     VendorPAN: data.VendorPAN || data.vendorPan || current.VendorPAN || "",
-    ContractNo: data.ContractNumber || data.ContractNo || data.contractNumber || current.ContractNo,
+    ContractNo: current.ContractNo || data.ContractNo || generateContractNo(),
+    ContactPerson: String(data.ContactPerson ?? current.ContactPerson ?? "").trim(),
     ContractStartDate: data.ValidFrom || data.ContractStartDate || current.ContractStartDate,
     ContractEndDate: data.ValidTo || data.ContractEndDate || current.ContractEndDate,
-    Remarks: data.Remarks || current.Remarks || null,
+    UserRemarks: data.UserRemarks !== undefined ? normalizeUserRemark(data.UserRemarks) : (current.UserRemarks || null),
     Status: String(data.Status || current.Status || CONTRACT_STATUS.DRAFT).toUpperCase(),
     RateMatrixFileName: file ? file.originalname : (current.RateMatrixFileName || null)
   };
@@ -51,6 +79,12 @@ const validateDateRange = (contractData, errors) => {
   }
 };
 
+const validateContractType = (contractData, errors) => {
+  if (!contractData.ContractType) {
+    errors.push("Invalid contract type chosen.");
+  }
+};
+
 const validateStatus = (contractData, errors) => {
   const allowedStatuses = Object.values(CONTRACT_STATUS);
   if (!allowedStatuses.includes(contractData.Status)) {
@@ -64,6 +98,7 @@ const validateMasterReferences = async (contractData, errors) => {
     errors.push("Selected Vendor record does not exist.");
   } else {
     contractData.VendorPAN = vendor.PANNo || vendor.PANNumber || vendor.VendorPAN || contractData.VendorPAN;
+    contractData.ContactPerson = contractData.ContactPerson || vendor.ContactPerson || vendor.VendorName || "";
   }
 };
 
@@ -80,10 +115,11 @@ const validateDuplicateContract = async (contractData, errors, excludeContractId
   if (contractData.Status === CONTRACT_STATUS.ACTIVE) {
     const activeContract = await contractRepository.getActiveContract({
       vendorId: contractData.VendorID,
+      contractType: contractData.ContractType,
       excludeContractId
     });
     if (activeContract) {
-      errors.push("Only one ACTIVE contract is allowed per vendor concurrently.");
+      errors.push(`This vendor already has an ACTIVE ${CONTRACT_TYPE_LABELS[contractData.ContractType]} contract.`);
     }
   }
 };
@@ -91,6 +127,7 @@ const validateDuplicateContract = async (contractData, errors, excludeContractId
 const validateContract = async (contractData, excludeContractId = null) => {
   const errors = validateRequiredFields(contractData);
   validateDateRange(contractData, errors);
+  validateContractType(contractData, errors);
   validateStatus(contractData, errors);
 
   if (!errors.length) {
@@ -108,143 +145,178 @@ const validateContract = async (contractData, excludeContractId = null) => {
   }
 };
 
-const processRateMatrixExcel = async (fileBuffer, contractId, startDate, endDate, transaction) => {
-  const workbook = xlsx.read(fileBuffer, { type: "buffer" });
+const buildImportError = (errors, message = "Rate Matrix Excel validation failed.") => {
+  const reported = errors.slice(0, MAX_REPORTED_IMPORT_ERRORS);
+  if (errors.length > reported.length) {
+    reported.push(`...and ${errors.length - reported.length} more issue(s).`);
+  }
+  const error = new Error(message);
+  error.statusCode = 400;
+  error.errors = reported;
+  return error;
+};
 
-  await contractRepository.clearRateMatrixByContractId(contractId, transaction);
+// Per-upload caches so each destination / slab / vehicle type is looked up once.
+const createMasterResolver = (transaction) => {
+  const destinations = new Map();
+  const slabs = new Map();
+  const vehicleTypes = new Map();
 
-  // 1. PROCESS SHEET 1: DOMESTIC DESTINATIONS
-  const sheet1Name = "DOMESTIC DESTINATIONS";
-  if (workbook.SheetNames.includes(sheet1Name)) {
-    const worksheet = workbook.Sheets[sheet1Name];
-    const rangeData = xlsx.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
+  const cached = async (cache, key, loader) => {
+    if (!cache.has(key)) cache.set(key, await loader());
+    return cache.get(key);
+  };
 
-    let headerRow = null;
-    let headerRowIndex = -1;
+  return {
+    destination: (city) =>
+      cached(destinations, city.toUpperCase(), () =>
+        contractRepository.findOrCreateDestination({ City: city, State: DEFAULT_DESTINATION_STATE }, transaction)
+      ),
 
-    for (let i = 0; i < Math.min(rangeData.length, 5); i++) {
-      const row = rangeData[i] || [];
-      const hasDestinationColumn = row.some(cell => 
-        String(cell || "").trim().toUpperCase() === "DESTINATION"
-      );
-      if (hasDestinationColumn) {
-        headerRow = row;
-        headerRowIndex = i;
-        break;
-      }
-    }
+    // A Sheet 1 weight slab is stored with both its WeightMaster row and a
+    // Vehicle Type of the same name (e.g. "20-21 MT"), so invoices can be
+    // matched on Destination + Vehicle Type for both sheets.
+    slab: (slab) =>
+      cached(slabs, slab.label, async () => {
+        const weight = await contractRepository.findOrCreateWeight(
+          { Weight: slab.capacity, WeightUnit: DEFAULT_WEIGHT_UNIT },
+          transaction
+        );
+        const vehicleType = await contractRepository.findOrCreateVehicleType(
+          { VehicleName: slab.label, Capacity: slab.capacity, Unit: DEFAULT_WEIGHT_UNIT },
+          transaction
+        );
+        return { WeightID: weight.WeightID, VehicleTypeID: vehicleType.VehicleTypeID };
+      }),
 
-    if (headerRow) {
-      const destColIdx = headerRow.findIndex(cell => String(cell || "").trim().toUpperCase() === "DESTINATION");
-      
-      const weightColumns = [];
-      for (let c = destColIdx + 1; c < headerRow.length; c++) {
-        const cellValue = String(headerRow[c] || "").trim();
-        if (cellValue) {
-          const numericWeight = parseFloat(cellValue.replace(/[^0-9.]/g, "")) || 0;
-          let weightRecord = await contractRepository.findOrCreateWeight({
-            Weight: numericWeight,
-            WeightUnit: "MT"
-          }, transaction);
+    vehicleType: (name) =>
+      cached(vehicleTypes, name.toUpperCase(), () =>
+        contractRepository.findOrCreateVehicleType(
+          { VehicleName: name, Capacity: parseVehicleCapacity(name), Unit: DEFAULT_WEIGHT_UNIT },
+          transaction
+        )
+      ),
+  };
+};
 
-          weightColumns[c] = weightRecord.WeightID;
-        }
-      }
-
-      for (let r = headerRowIndex + 1; r < rangeData.length; r++) {
-        const row = rangeData[r];
-        if (!row || row.length === 0) continue;
-
-        const destinationName = String(row[destColIdx] || "").trim();
-        if (!destinationName || destinationName.startsWith("Ref:") || destinationName.toUpperCase() === "DETENTION") {
-          continue;
-        }
-
-        const destination = await contractRepository.findOrCreateDestination({
-          City: destinationName,
-          State: "Gujarat"
-        }, transaction);
-
-        for (let colIdx = destColIdx + 1; colIdx < row.length; colIdx++) {
-          const weightId = weightColumns[colIdx];
-          const rateValue = parseFloat(row[colIdx]);
-
-          if (weightId && !isNaN(rateValue) && rateValue > 0) {
-            await contractRepository.createRateMatrixEntry({
-              ContractID: contractId,
-              DestinationID: destination.DestinationID,
-              WeightID: weightId,
-              VehicleTypeID: null,
-              BaseRate: rateValue,
-              EffectiveFrom: startDate,
-              EffectiveTo: endDate
-            }, transaction);
-          }
-        }
-      }
+const importDomesticRows = async (rows, baseEntry, resolver, transaction) => {
+  for (const row of rows) {
+    const destination = await resolver.destination(row.destination);
+    for (const rate of row.rates) {
+      const slabRefs = await resolver.slab(rate.slab);
+      await contractRepository.createRateMatrixEntry({
+        ...baseEntry,
+        ...slabRefs,
+        DestinationID: destination.DestinationID,
+        DistanceKM: row.distanceKm,
+        BaseRate: rate.amount,
+      }, transaction);
     }
   }
+};
 
-  // 2. PROCESS SHEET 2: ADDITIONAL DESTINATIONS
-  const sheet2Name = "ADDITIONAL DESTINATIONS";
-  if (workbook.SheetNames.includes(sheet2Name)) {
-    const worksheet2 = workbook.Sheets[sheet2Name];
-    const rangeData2 = xlsx.utils.sheet_to_json(worksheet2, { header: 1, blankrows: false });
-
-    let headerRow2Index = -1;
-    let destCol2 = -1;
-    let vehicleCol2 = -1;
-    let freightCol2 = -1;
-
-    for (let i = 0; i < Math.min(rangeData2.length, 5); i++) {
-      const row = rangeData2[i] || [];
-      for (let c = 0; c < row.length; c++) {
-        const val = String(row[c] || "").trim().toUpperCase();
-        if (val.includes("DESTINATION")) destCol2 = c;
-        if (val.includes("VEHICLE TYPE")) vehicleCol2 = c;
-        if (val.includes("FREIGHT")) freightCol2 = c;
-      }
-      if (destCol2 !== -1 && vehicleCol2 !== -1 && freightCol2 !== -1) {
-        headerRow2Index = i;
-        break;
-      }
-    }
-
-    if (headerRow2Index !== -1) {
-      for (let r = headerRow2Index + 1; r < rangeData2.length; r++) {
-        const row = rangeData2[r];
-        if (!row || row.length === 0) continue;
-
-        const destinationName = String(row[destCol2] || "").trim();
-        const vehicleTypeName = String(row[vehicleCol2] || "").trim();
-        const freightAmount = parseFloat(row[freightCol2]);
-
-        if (destinationName && vehicleTypeName && !isNaN(freightAmount) && freightAmount > 0) {
-          const destination = await contractRepository.findOrCreateDestination({
-            City: destinationName,
-            State: "Gujarat"
-          }, transaction);
-
-          const parsedCapacity = parseFloat(vehicleTypeName.replace(/[^0-9.]/g, "")) || 0;
-          const vehicleType = await contractRepository.findOrCreateVehicleType({
-            VehicleName: vehicleTypeName,
-            Capacity: parsedCapacity,
-            Unit: "MT"
-          }, transaction);
-
-          await contractRepository.createRateMatrixEntry({
-            ContractID: contractId,
-            DestinationID: destination.DestinationID,
-            WeightID: null,
-            VehicleTypeID: vehicleType.VehicleTypeID,
-            BaseRate: freightAmount,
-            EffectiveFrom: startDate,
-            EffectiveTo: endDate
-          }, transaction);
-        }
-      }
-    }
+const importAdditionalRows = async (rows, baseEntry, resolver, transaction) => {
+  for (const row of rows) {
+    const destination = await resolver.destination(row.destination);
+    const vehicleType = await resolver.vehicleType(row.vehicleType);
+    await contractRepository.createRateMatrixEntry({
+      ...baseEntry,
+      DestinationID: destination.DestinationID,
+      WeightID: null,
+      VehicleTypeID: vehicleType.VehicleTypeID,
+      DistanceKM: row.distanceKm,
+      BaseRate: row.freight,
+    }, transaction);
   }
+};
+
+// FTL Inbound rows carry a vehicle slab (resolved like Sheet 1 slabs of
+// FTL Outbound); PTL Outbound rows carry a destination only.
+const importTypeRateRows = async (rows, baseEntry, resolver, transaction) => {
+  for (const row of rows) {
+    const destination = await resolver.destination(row.destination);
+    const slabRefs = row.slab ? await resolver.slab(row.slab) : { WeightID: null, VehicleTypeID: null };
+    await contractRepository.createRateMatrixEntry({
+      ...baseEntry,
+      ...slabRefs,
+      DestinationID: destination.DestinationID,
+      DistanceKM: row.distanceKm,
+      DeliveryLocation: row.deliveryLocation,
+      TransitDays: row.transitDays,
+      BaseRate: row.rate,
+    }, transaction);
+  }
+};
+
+const importFtlOutboundWorkbook = async (fileBuffer, baseEntry, resolver, transaction) => {
+  const { domesticRows, additionalRows, errors } = parseRateMatrixWorkbook(fileBuffer);
+  if (errors.length) throw buildImportError(errors);
+
+  await contractRepository.clearRateMatrixByContractId(baseEntry.ContractID, transaction);
+  await importDomesticRows(domesticRows, baseEntry, resolver, transaction);
+  await importAdditionalRows(additionalRows, baseEntry, resolver, transaction);
+};
+
+// Replaces the rate matrix, charges and zone rates of an FTL Inbound,
+// PTL Outbound or Part Load contract with already validated data.
+const replaceContractTypeData = async ({ rateRows, charges, zoneRates }, baseEntry, resolver, transaction) => {
+  await contractRepository.clearRateMatrixByContractId(baseEntry.ContractID, transaction);
+  await importTypeRateRows(rateRows, baseEntry, resolver, transaction);
+  await contractRepository.replaceContractCharges(baseEntry.ContractID, charges, transaction);
+  await contractRepository.replaceContractZoneRates(baseEntry.ContractID, zoneRates, transaction);
+};
+
+const importContractTypeWorkbook = async (fileBuffer, contractType, baseEntry, resolver, transaction) => {
+  const parsed = parseContractTypeWorkbook(fileBuffer, contractType);
+  if (parsed.errors.length) throw buildImportError(parsed.errors);
+  await replaceContractTypeData(parsed, baseEntry, resolver, transaction);
+};
+
+// Saves the sheets edited on the Edit Contract page. The whole data set is
+// sent and validated first, exactly like a re-uploaded Excel.
+const applyEditedContractSheets = async (editedSheets, contractId, contractData, transaction) => {
+  const parsed = parseContractSheets(editedSheets, contractData.ContractType);
+  if (parsed.errors.length) throw buildImportError(parsed.errors, "Contract sheet validation failed.");
+
+  const baseEntry = { ContractID: contractId, EffectiveFrom: contractData.ContractStartDate, EffectiveTo: contractData.ContractEndDate };
+  await replaceContractTypeData(parsed, baseEntry, createMasterResolver(transaction), transaction);
+};
+
+// Validates the whole workbook first, and only then replaces the
+// contract's rate matrix, so a bad file never leaves partial data behind.
+const processRateMatrixExcel = async (fileBuffer, contractId, contractType, startDate, endDate, transaction) => {
+  const baseEntry = { ContractID: contractId, EffectiveFrom: startDate, EffectiveTo: endDate };
+  const resolver = createMasterResolver(transaction);
+
+  if (contractType === CONTRACT_TYPES.FTL_OUTBOUND) {
+    await importFtlOutboundWorkbook(fileBuffer, baseEntry, resolver, transaction);
+  } else {
+    await importContractTypeWorkbook(fileBuffer, contractType, baseEntry, resolver, transaction);
+  }
+};
+
+// Resolves the Weight / Vehicle Type keys of a destination added manually
+// on the Edit Contract grid. Sheet 1 rows send their slab label, Sheet 2
+// rows send the selected VehicleTypeID.
+const resolveManualRateKeys = async (rateRow, resolver) => {
+  const weightObj = rateRow.weight;
+  const slabText = rateRow.slabLabel
+    || (weightObj ? `${weightObj.Weight ?? weightObj.weight} ${weightObj.WeightUnit || weightObj.weightUnit || DEFAULT_WEIGHT_UNIT}` : null);
+
+  if (slabText) {
+    const slab = parseWeightSlab(slabText);
+    if (!slab) throw buildImportError([`'${slabText}' is not a valid weight slab.`]);
+    return resolver.slab(slab);
+  }
+  if (rateRow.VehicleTypeID !== undefined && rateRow.VehicleTypeID !== null && rateRow.VehicleTypeID !== "") {
+    return { WeightID: null, VehicleTypeID: rateRow.VehicleTypeID };
+  }
+  const vehicleName = rateRow.vehicleType?.VehicleName || rateRow.vehicleType?.vehicleName;
+  if (vehicleName) {
+    const vehicleType = await resolver.vehicleType(vehicleName);
+    return { WeightID: null, VehicleTypeID: vehicleType.VehicleTypeID };
+  }
+  return { WeightID: null, VehicleTypeID: null };
 };
 
 const createContract = async ({ data, file, user }) => {
@@ -256,6 +328,7 @@ const createContract = async ({ data, file, user }) => {
     const contract = await contractRepository.createContract(
       {
         ...contractData,
+        Remarks: buildCreatedRemark(user, `${CONTRACT_TYPE_LABELS[contractData.ContractType] || contractData.ContractType} contract`),
         CreatedBy: user?.UserID || null,
         CreatedAt: sequelize.literal("GETDATE()"),
       },
@@ -263,7 +336,7 @@ const createContract = async ({ data, file, user }) => {
     );
 
     if (file) {
-      await processRateMatrixExcel(file.buffer, contract.ContractID, contractData.ContractStartDate, contractData.ContractEndDate, transaction);
+      await processRateMatrixExcel(file.buffer, contract.ContractID, contractData.ContractType, contractData.ContractStartDate, contractData.ContractEndDate, transaction);
     }
 
     await transaction.commit();
@@ -293,6 +366,7 @@ const updateContract = async ({ contractId, data, file, user }) => {
       contractId,
       {
         ...contractData,
+        Remarks: buildUpdatedRemark(existingContract.Remarks, user, file ? `Rate matrix re-uploaded (${file.originalname})` : ""),
         UpdatedBy: user?.UserID || null,
         UpdatedAt: sequelize.literal("GETDATE()"),
       },
@@ -301,67 +375,30 @@ const updateContract = async ({ contractId, data, file, user }) => {
 
     if (file) {
       // New file uploaded, re-process excel sheets
-      await processRateMatrixExcel(file.buffer, contractId, contractData.ContractStartDate, contractData.ContractEndDate, transaction);
-    } else if (data.editedRates) {
+      await processRateMatrixExcel(file.buffer, contractId, contractData.ContractType, contractData.ContractStartDate, contractData.ContractEndDate, transaction);
+    } else if (data.editedRates && contractData.ContractType === CONTRACT_TYPES.FTL_OUTBOUND) {
       // Bulk update/sync edited rates and newly added destinations from table/grid
       const parsedRates = typeof data.editedRates === "string" ? JSON.parse(data.editedRates) : data.editedRates;
-      
+      const resolver = createMasterResolver(transaction);
+
       for (const rateRow of parsedRates) {
         const rateId = rateRow.RateID || rateRow.RateId || rateRow.contractRateMatrixID;
         const baseRateVal = parseFloat(rateRow.BaseRate !== undefined ? rateRow.BaseRate : rateRow.baseRate);
 
         if (String(rateId).startsWith("temp_")) {
-          // Handle newly added destination from frontend modal
+          // Newly added destination from the Edit Contract grid. Blank or
+          // zero rates are skipped - a zero contract rate would approve
+          // any billed freight during the invoice audit.
           const destName = rateRow.destination?.City || rateRow.Destination?.City;
-          if (destName) {
-            const destination = await contractRepository.findOrCreateDestination({
-              City: destName,
-              State: "Gujarat"
-            }, transaction);
-
-            let weightId = null;
-            let vehicleTypeId = null;
-
-            // Sheet 1 (domestic destinations by weight slab): the frontend
-            // sends a `weight` display object ({ Weight, WeightUnit }) for
-            // each slab of a newly added destination, but never a
-            // pre-existing WeightID (there isn't one yet). Resolve/create
-            // the real WeightMaster record from that object instead of
-            // gating on WeightID already being set - otherwise every
-            // weight slab for the same new destination resolves to the
-            // same NULL WeightID and collides under the
-            // (ContractID, DestinationID, VehicleTypeID, WeightID) unique
-            // constraint as soon as a second slab is inserted.
-            if (rateRow.weight && (rateRow.weight.Weight !== undefined || rateRow.weight.weight !== undefined)) {
-              const numWeight = parseFloat(rateRow.weight.Weight ?? rateRow.weight.weight ?? 0);
-              const weightUnit = rateRow.weight.WeightUnit || rateRow.weight.weightUnit || "MT";
-              const weightRecord = await contractRepository.findOrCreateWeight({
-                Weight: numWeight,
-                WeightUnit: weightUnit
-              }, transaction);
-              weightId = weightRecord.WeightID;
-            } else if (rateRow.VehicleTypeID !== undefined && rateRow.VehicleTypeID !== null) {
-              // Sheet 2 (additional destinations by vehicle type): the
-              // frontend already sends a real VehicleTypeID selected from
-              // Vehicle Type Master, so use it directly.
-              vehicleTypeId = rateRow.VehicleTypeID;
-            } else if (rateRow.vehicleType) {
-              const vName = rateRow.vehicleType.VehicleName || rateRow.vehicleType.vehicleName;
-              const parsedCap = parseFloat(vName.replace(/[^0-9.]/g, "")) || 0;
-              const vehicleRecord = await contractRepository.findOrCreateVehicleType({
-                VehicleName: vName,
-                Capacity: parsedCap,
-                Unit: "MT"
-              }, transaction);
-              vehicleTypeId = vehicleRecord.VehicleTypeID;
-            }
+          if (destName && baseRateVal > 0) {
+            const destination = await resolver.destination(destName);
+            const rateKeys = await resolveManualRateKeys(rateRow, resolver);
 
             await contractRepository.createRateMatrixEntry({
               ContractID: contractId,
               DestinationID: destination.DestinationID,
-              WeightID: weightId,
-              VehicleTypeID: vehicleTypeId,
-              BaseRate: isNaN(baseRateVal) ? 0 : baseRateVal,
+              ...rateKeys,
+              BaseRate: baseRateVal,
               EffectiveFrom: contractData.ContractStartDate,
               EffectiveTo: contractData.ContractEndDate
             }, transaction);
@@ -371,6 +408,8 @@ const updateContract = async ({ contractId, data, file, user }) => {
           await contractRepository.updateRateMatrixEntry(rateId, baseRateVal, transaction);
         }
       }
+    } else if (data.editedSheets && contractData.ContractType !== CONTRACT_TYPES.FTL_OUTBOUND) {
+      await applyEditedContractSheets(data.editedSheets, contractId, contractData, transaction);
     }
 
     await transaction.commit();
@@ -410,7 +449,8 @@ const getContractById = async (contractId) => {
 const getAllContracts = async (query) => {
   return await contractRepository.getAllContracts({
     ...query,
-    vendorId: query.vendorId || query.VendorID || query.VendorId
+    vendorId: query.vendorId || query.VendorID || query.VendorId,
+    contractType: query.contractType || query.ContractType
   });
 };
 

@@ -2,13 +2,10 @@ const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 const { literal } = require("sequelize");
 
-// A simple, shared event feed (not per-user targeted) covering the three
-// event types the notification bell cares about: new invoice uploaded,
-// discrepancy detected during audit, and audit email sent. Kept
-// intentionally minimal — no per-user read-state table — since "unread"
-// is tracked client-side against a last-seen timestamp (see
-// NotificationCenter). Add per-user read tracking later only if this
-// single-feed model turns out to be insufficient.
+// Per-user notification feed. Each row belongs to one recipient (UserID),
+// so a user only ever sees their own notifications; admins can optionally
+// view every user's feed. "Unread" is still tracked client-side against a
+// last-seen timestamp (see useNotifications).
 const Notification = sequelize.define(
   "Notification",
   {
@@ -27,6 +24,12 @@ const Notification = sequelize.define(
     },
     RelatedInvoiceID: {
       type: DataTypes.BIGINT,
+      allowNull: true,
+    },
+    // Recipient of this notification. Nullable only for rows created before
+    // migration_v10.sql, which are visible to admins in the "All users" view.
+    UserID: {
+      type: DataTypes.INTEGER,
       allowNull: true,
     },
     CreatedAt: {

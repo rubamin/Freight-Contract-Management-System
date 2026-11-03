@@ -14,7 +14,6 @@ import {
     Tooltip,
 } from "recharts";
 import { useTheme } from "@mui/material/styles";
-import PageCard from "../common/PageCard";
 import { Typography, Box } from "@mui/material";
 
 const VENDOR_COLORS = ["#22C55E", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"];

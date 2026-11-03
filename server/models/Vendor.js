@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+const { REMARK_COLUMNS } = require("./remarkColumns");
 
 const Vendor = sequelize.define(
   "Vendor",
@@ -56,6 +57,8 @@ const Vendor = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+
+    ...REMARK_COLUMNS,
 
     // CreatedAt: {
     //   type: DataTypes.DATE,

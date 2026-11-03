@@ -17,7 +17,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination
+  TablePagination,
+  Autocomplete,
+  MenuItem
 } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import { 
@@ -31,15 +33,27 @@ import {
   Description,
   Email,
   Edit,
-  PendingActions
+  PendingActions,
+  History
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import dayjs from "dayjs";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import PageHeader from "../../components/common/PageHeader";
 import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
-import { formatDateDisplay } from "../../utils/dateFormat";
+import { formatDateDisplay, parseDateForApi, toDayjsValue, DISPLAY_DATE_FORMAT } from "../../utils/dateFormat";
 import usePermissions from "../../hooks/usePermissions";
+import { USER_REMARKS_LABEL, SYSTEM_REMARKS_LABEL } from "../../constants/remarks";
+import ApprovalStatusChip from "../../components/approvalWorkflow/ApprovalStatusChip";
+import InvoiceTimelineDialog from "../../components/approvalWorkflow/InvoiceTimelineDialog";
+import InvoiceDraftsPanel from "../../components/invoiceForm/InvoiceDraftsPanel";
+import DeleteDialog from "../../components/common/DeleteDialog";
+import useInvoiceDrafts from "../../hooks/useInvoiceDrafts";
+import { DRAFT_PAGE_PATHS, DRAFT_TYPES } from "../../constants/invoiceDrafts";
 
 // Modal styling for audit remarks/logs popup
 const remarksModalStyle = {
@@ -55,12 +69,40 @@ const remarksModalStyle = {
   borderLeft: "6px solid #0288d1"
 };
 
+// Which invoice date the From / To range applies to (server: dateField).
+const DATE_FIELD_OPTIONS = [
+  { value: "createdDate", label: "Create Date" },
+  { value: "invoiceDate", label: "Invoice Date" },
+  { value: "lrDate", label: "LR Date" },
+];
+
+// Location and date range filters of the list.
+const EMPTY_FILTERS = { locationId: null, dateField: "createdDate", from: "", to: "" };
+
+// Query params sent to /api/invoices; only filled filters are sent.
+const buildListParams = (search, filters) => ({
+  search,
+  page: 1,
+  pageSize: 100,
+  ...(filters.locationId ? { locationId: filters.locationId } : {}),
+  ...(filters.from || filters.to ? { dateField: filters.dateField } : {}),
+  ...(filters.from ? { from: filters.from } : {}),
+  ...(filters.to ? { to: filters.to } : {}),
+});
+
+const DATE_FILTER_SLOT_PROPS = {
+  textField: { size: "small", fullWidth: true, slotProps: { inputLabel: { shrink: true } } },
+  field: { clearable: true },
+};
+
 const InvoiceList = () => {
   const navigate = useNavigate();
-  const { canEdit, loaded: permissionsLoaded } = usePermissions();
+  const { canEdit, canOnInvoice, loaded: permissionsLoaded } = usePermissions();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [locationOptions, setLocationOptions] = useState([]);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
   
   // Pagination states
@@ -73,6 +115,31 @@ const InvoiceList = () => {
     severity: "success",
     message: "",
   });
+
+  // Own drafts and drafts shared with the user (Add and Edit Invoice).
+  const { drafts, deleteDraft } = useInvoiceDrafts();
+  const [draftIdToDelete, setDraftIdToDelete] = useState(null);
+  const [isDeletingDraft, setIsDeletingDraft] = useState(false);
+
+  const handleResumeDraft = (draft) => {
+    navigate(DRAFT_PAGE_PATHS[draft.DraftType] || DRAFT_PAGE_PATHS[DRAFT_TYPES.ADD], { state: { draftId: draft.DraftID } });
+  };
+
+  const handleConfirmDeleteDraft = async () => {
+    setIsDeletingDraft(true);
+    try {
+      await deleteDraft(draftIdToDelete);
+      setSnackbar({ open: true, severity: "success", message: "Draft deleted." });
+    } catch (error) {
+      setSnackbar({ open: true, severity: "error", message: error?.response?.data?.message || "Failed to delete the draft." });
+    } finally {
+      setIsDeletingDraft(false);
+      setDraftIdToDelete(null);
+    }
+  };
+
+  // Invoice whose approval history dialog is open.
+  const [timelineInvoice, setTimelineInvoice] = useState(null);
 
   // Remarks modal state
   const [remarksModal, setRemarksModal] = useState({
@@ -100,10 +167,10 @@ const InvoiceList = () => {
     try {
       setLoading(true);
       const headers = getAuthHeader();
-      const response = await axios.get(
-        `http://localhost:5000/api/invoices?search=${search}&page=1&pageSize=100`, 
-        { headers }
-      );
+      const response = await axios.get("http://localhost:5000/api/invoices", {
+        headers,
+        params: buildListParams(search, filters),
+      });
       const records = Array.isArray(response.data) ? response.data : (response.data?.data || []);
       setInvoices(records);
     } catch (err) {
@@ -120,11 +187,37 @@ const InvoiceList = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [search]);
+    setPage(0);
+  }, [search, filters]);
 
-  // Clear search filter handler
+  // Locations of the Company -> SBU -> Plant -> Location hierarchy, grouped
+  // by plant in the Location filter.
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/api/settings/metadata", { headers: getAuthHeader() });
+        const metadata = response.data?.data || response.data || {};
+        const plantNames = new Map((metadata.plants || []).map((plant) => [Number(plant.PlantHierarchyID), plant.PlantName]));
+        const options = (metadata.locations || []).map((location) => ({
+          LocationID: location.LocationID,
+          LocationName: location.LocationName,
+          PlantName: plantNames.get(Number(location.PlantHierarchyID)) || "Other",
+        }));
+        setLocationOptions(options.sort((a, b) => a.PlantName.localeCompare(b.PlantName) || a.LocationName.localeCompare(b.LocationName)));
+      } catch (err) {
+        console.warn("Could not load locations for the invoice filter", err);
+      }
+    };
+    fetchLocations();
+  }, []);
+
+  const handleFilterChange = (field, value) => {
+    setFilters((current) => ({ ...current, [field]: value }));
+  };
+
   const handleClearFilters = () => {
     setSearch("");
+    setFilters(EMPTY_FILTERS);
   };
 
   // Navigate to the Edit Invoice page carrying the selected invoice IDs so
@@ -139,7 +232,26 @@ const InvoiceList = () => {
       });
       return;
     }
-    navigate("/invoices/edit", { state: { invoiceIds: selectedRowIds } });
+    // Only invoices of locations the user has Edit access to.
+    const editableIds = selectedRowIds.filter((invoiceId) =>
+      canOnInvoice(invoices.find((invoice) => invoice.InvoiceID === invoiceId), "edit")
+    );
+    if (editableIds.length === 0) {
+      setSnackbar({
+        open: true,
+        severity: "warning",
+        message: "You do not have Edit access to the location of the selected invoice(s).",
+      });
+      return;
+    }
+    if (editableIds.length < selectedRowIds.length) {
+      setSnackbar({
+        open: true,
+        severity: "info",
+        message: `${selectedRowIds.length - editableIds.length} invoice(s) skipped - no Edit access to their location.`,
+      });
+    }
+    navigate("/invoices/edit", { state: { invoiceIds: editableIds } });
   };
 
   // Navigate to the Edit Invoice page for a single row via its own Edit icon.
@@ -161,26 +273,26 @@ const InvoiceList = () => {
     try {
       setLoading(true);
       const headers = getAuthHeader();
-      const selectedInvoicesData = rows.filter((row) => selectedRowIds.includes(row.id));
 
-      await axios.post(
+      const response = await axios.post(
         "http://localhost:5000/api/invoices/send-mail",
-        { invoices: selectedInvoicesData },
+        { invoiceIds: selectedRowIds },
         { headers }
       );
 
       setSnackbar({
         open: true,
         severity: "success",
-        message: "Selected invoices data sent via email successfully!",
+        message: response.data?.message || "Mail sent for the selected invoices.",
       });
       setSelectedRowIds([]);
+      fetchInvoices();
     } catch (err) {
       console.error("Error sending email:", err);
       setSnackbar({
         open: true,
         severity: "error",
-        message: "Failed to send email. Please try again.",
+        message: err.response?.data?.message || "Failed to send email. Please try again.",
       });
     } finally {
       setLoading(false);
@@ -254,14 +366,17 @@ const InvoiceList = () => {
         srNo: index + 1,
         InvoiceID: invoice.InvoiceID,
         PlantID: invoice.PlantID ?? invoice.plantId ?? null,
+        // Decides Edit access (Settings & Hierarchy Access).
+        LocationID: invoice.LocationID ?? null,
         LocationName: rawLocation,
-        UploadedDateStr: invoice.UploadedDate ? new Date(invoice.UploadedDate).toISOString().slice(0, 10) : "-",
+        CreatedDate: formatDateDisplay(invoice.UploadedDate),
         GSTNumber: invoice.vendorGST?.GSTNumber || invoice.gstNo || "-",
         CustomerName: rawCustomer,
         InvoiceNumber: invoice.InvoiceNumber || invoice.invoiceNo || "-",
         InvoiceDate: formattedInvoiceDate, 
         LRDate: formattedLrDate,
         LRNumber: invoice.LRNumber || invoice.lrNo || "-",
+        SONumber: invoice.SONumber || "-",
         VehicleType: vehicleTypeName,
         FromStation: invoice.FromStation || invoice.fromStation || "-",
         ToStation: invoice.ToStation || invoice.toStation || "-",
@@ -273,8 +388,12 @@ const InvoiceList = () => {
         ExpectedAmount: expected,
         VarianceAmount: variance,
         AuditStatus: displayStatus,
+        ApprovalStatus: invoice.ApprovalStatus || null,
+        CurrentStepOrder: invoice.CurrentStepOrder || null,
+        EnteredBy: invoice.uploader?.FullName || "-",
         PreAppr: isPreApproved ? "Yes" : "No",
         Remarks: invoice.Remarks || invoice.remarks || "-",
+        UserRemarks: invoice.UserRemarks || "-",
         Doc1Path: invoice.Doc1Path || invoice.doc1Path || null,
         Doc2Path: invoice.Doc2Path || invoice.doc2Path || null,
         Doc3Path: invoice.Doc3Path || invoice.doc3Path || null,
@@ -343,6 +462,7 @@ const InvoiceList = () => {
   const paginatedRows = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
     <Box p={3} sx={{ width: "100%" }}>
       <Box sx={{ p: 3, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
         <PageHeader
@@ -389,13 +509,21 @@ const InvoiceList = () => {
         </Box>
       </Box>
 
+      <InvoiceDraftsPanel
+        drafts={drafts}
+        busyDraftId={isDeletingDraft ? draftIdToDelete : null}
+        onResume={handleResumeDraft}
+        onDelete={setDraftIdToDelete}
+        sx={{ maxWidth: "none", mx: 0, mb: 3 }}
+      />
+
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} sx={{ alignItems: "center" }}>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
               size="small"
-              placeholder="Search Invoice Number, LR, or Vehicle details..."
+              placeholder="Search Invoice Number, LR or SO Number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               slotProps={{
@@ -410,6 +538,52 @@ const InvoiceList = () => {
             />
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
+            <Autocomplete
+              size="small"
+              options={locationOptions}
+              groupBy={(option) => option.PlantName}
+              getOptionLabel={(option) => option?.LocationName || ""}
+              isOptionEqualToValue={(option, value) => option.LocationID === value?.LocationID}
+              value={locationOptions.find((option) => option.LocationID === filters.locationId) || null}
+              onChange={(e, option) => handleFilterChange("locationId", option?.LocationID || null)}
+              renderInput={(params) => <TextField {...params} label="Location" placeholder="All Locations" />}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4, md: 3 }}>
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Date Type"
+              value={filters.dateField}
+              onChange={(e) => handleFilterChange("dateField", e.target.value)}
+            >
+              {DATE_FIELD_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+            <DatePicker
+              label="From Date"
+              value={toDayjsValue(filters.from)}
+              onChange={(value) => handleFilterChange("from", parseDateForApi(value) || "")}
+              format={DISPLAY_DATE_FORMAT}
+              maxDate={filters.to ? dayjs(filters.to) : undefined}
+              slotProps={DATE_FILTER_SLOT_PROPS}
+            />
+          </Grid>
+          <Grid size={{ xs: 6, sm: 4, md: 3 }}>
+            <DatePicker
+              label="To Date"
+              value={toDayjsValue(filters.to)}
+              onChange={(value) => handleFilterChange("to", parseDateForApi(value) || "")}
+              format={DISPLAY_DATE_FORMAT}
+              minDate={filters.from ? dayjs(filters.from) : undefined}
+              slotProps={DATE_FILTER_SLOT_PROPS}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 3 }}>
             <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
               <Button variant="outlined" size="small" startIcon={<Refresh />} onClick={fetchInvoices}>
                 Refresh
@@ -437,13 +611,14 @@ const InvoiceList = () => {
                 </TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>#</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Location</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Upload Date</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Create Date</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Invoice No</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Invoice Date</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Customer Name</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Customer / Supplier</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>GST Number</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>LR Date</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>LR No</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>SO No</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Vehicle Type</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>From</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>To</TableCell>
@@ -454,25 +629,28 @@ const InvoiceList = () => {
                 <TableCell sx={{ fontWeight: "bold" }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Pre-Appr</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Approval Status</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Entered By</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Actual Contract Price</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Extra Charged</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Doc 1</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Doc 2</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Doc 3</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Remarks</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>{USER_REMARKS_LABEL}</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>{SYSTEM_REMARKS_LABEL}</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={27} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={31} align="center" sx={{ py: 3 }}>
                     <Typography>Loading Invoices...</Typography>
                   </TableCell>
                 </TableRow>
               ) : paginatedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={27} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={31} align="center" sx={{ py: 3 }}>
                     <Typography color="text.secondary">No Invoices Found</Typography>
                   </TableCell>
                 </TableRow>
@@ -508,13 +686,14 @@ const InvoiceList = () => {
                       </TableCell>
                       <TableCell>{row.srNo}</TableCell>
                       <TableCell>{row.LocationName}</TableCell>
-                      <TableCell>{row.UploadedDateStr}</TableCell>
+                      <TableCell>{row.CreatedDate}</TableCell>
                       <TableCell>{row.InvoiceNumber}</TableCell>
                       <TableCell>{row.InvoiceDate}</TableCell>
                       <TableCell>{row.CustomerName}</TableCell>
                       <TableCell>{row.GSTNumber}</TableCell>
                       <TableCell>{row.LRDate}</TableCell>
                       <TableCell>{row.LRNumber}</TableCell>
+                      <TableCell>{row.SONumber}</TableCell>
                       <TableCell>{row.VehicleType}</TableCell>
                       <TableCell>{row.LocationName}</TableCell>
                       <TableCell>{row.ToStation}</TableCell>
@@ -533,6 +712,14 @@ const InvoiceList = () => {
                           size="small"
                         />
                       </TableCell>
+                      <TableCell>
+                        <ApprovalStatusChip
+                          status={row.ApprovalStatus}
+                          stepName={row.CurrentStepOrder ? `Step ${row.CurrentStepOrder}` : null}
+                          onClick={() => setTimelineInvoice(row)}
+                        />
+                      </TableCell>
+                      <TableCell>{row.EnteredBy}</TableCell>
                       <TableCell>₹{parseFloat(row.ExpectedAmount).toFixed(2)}</TableCell>
                       <TableCell>
                         {extra <= 15 ? (
@@ -546,6 +733,9 @@ const InvoiceList = () => {
                       <TableCell>{renderDocCell(row.Doc1Path)}</TableCell>
                       <TableCell>{renderDocCell(row.Doc2Path)}</TableCell>
                       <TableCell>{renderDocCell(row.Doc3Path)}</TableCell>
+                      <TableCell sx={{ maxWidth: 200 }}>
+                        <Typography variant="body2" noWrap title={row.UserRemarks}>{row.UserRemarks}</Typography>
+                      </TableCell>
                       <TableCell>
                         <Typography
                           variant="body2"
@@ -569,8 +759,15 @@ const InvoiceList = () => {
                           {row.Remarks}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        {permissionsLoaded && canEdit("invoices") && (
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => setTimelineInvoice(row)}
+                          title="Approval history"
+                        >
+                          <History fontSize="small" />
+                        </IconButton>
+                        {permissionsLoaded && canEdit("invoices") && canOnInvoice(row, "edit") && (
                           <IconButton
                             size="small"
                             color="primary"
@@ -625,6 +822,21 @@ const InvoiceList = () => {
         </Box>
       </Modal>
 
+      <InvoiceTimelineDialog
+        invoiceId={timelineInvoice?.InvoiceID}
+        invoiceNumber={timelineInvoice?.InvoiceNumber}
+        onClose={() => setTimelineInvoice(null)}
+      />
+
+      <DeleteDialog
+        open={Boolean(draftIdToDelete)}
+        title="Delete Draft"
+        message="Delete this saved draft and its attachments? This cannot be undone."
+        loading={isDeletingDraft}
+        onClose={() => setDraftIdToDelete(null)}
+        onConfirm={handleConfirmDeleteDraft}
+      />
+
       <LoadingOverlay open={loading} message="Loading Invoices..." />
       <AppSnackbar
         open={snackbar.open}
@@ -633,6 +845,7 @@ const InvoiceList = () => {
         onClose={() => setSnackbar({ ...snackbar, open: false })}
       />
     </Box>
+    </LocalizationProvider>
   );
 };
 

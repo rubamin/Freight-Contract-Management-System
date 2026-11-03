@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 const { literal } = require("sequelize");
+const { USER_REMARKS_COLUMN } = require("./remarkColumns");
 
 const InvoiceHeader = sequelize.define(
   "InvoiceHeader",
@@ -56,8 +57,18 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Contract type the invoice was entered under (migration_v11).
+    ContractType: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
     LRNumber: {
       type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    // Sales Order number of the trip (migration_v15).
+    SONumber: {
+      type: DataTypes.STRING(50),
       allowNull: true,
     },
     LRDate: {
@@ -94,6 +105,39 @@ const InvoiceHeader = sequelize.define(
       allowNull: true,
       defaultValue: 0.00,
     },
+    // Per contract type fields entered on Add Invoice (migration_v11).
+    Packages: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    ChargedWeight: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+    BilledRate: {
+      type: DataTypes.DECIMAL(18, 4),
+      allowNull: true,
+    },
+    DocketCharges: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+    ODACategory: {
+      type: DataTypes.STRING(5),
+      allowNull: true,
+    },
+    ODACharges: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+    FOVCharges: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+    LoadingCharges: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
     GSTAmount: {
       type: DataTypes.DECIMAL(18, 2),
       allowNull: true,
@@ -122,8 +166,40 @@ const InvoiceHeader = sequelize.define(
       type: DataTypes.STRING(100),
       allowNull: true,
     },
+    // System generated audit outcome - see constants/remarks.js.
     Remarks: {
       type: DataTypes.STRING(DataTypes.MAX),
+      allowNull: true,
+    },
+    ...USER_REMARKS_COLUMN,
+    // Approval workflow tracking (migration_v14) - see
+    // services/approvalWorkflow.service.js.
+    ApprovalStatus: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
+    CurrentStepOrder: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    SelectedApproverUserID: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    DraftCreatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    SubmittedForApprovalAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    FinalApprovedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    FinalApprovedBy: {
+      type: DataTypes.INTEGER,
       allowNull: true,
     },
     // --- Newly added document path fields ---

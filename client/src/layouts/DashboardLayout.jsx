@@ -34,6 +34,10 @@ import {
   DirectionsCar,
   Groups,
   ManageAccounts,
+  FactCheck,
+  PendingActions,
+  AccountTree,
+  LockReset,
   Menu as MenuIcon,
 } from "@mui/icons-material";
 
@@ -44,6 +48,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 
 import { logout } from "../redux/slices/authSlice";
 import { MODULE_KEYS } from "../constants/modules";
+import { MASTER_APPROVAL_MODULE_KEYS, MASTER_APPROVALS_PATH, MASTER_APPROVAL_SETTINGS_PATH } from "../constants/masterApproval";
 import { getMyPermissions } from "../services/userService";
 import useLocalStorageState from "../hooks/useLocalStorageState";
 import NotificationCenter from "../components/common/NotificationCenter";
@@ -65,10 +70,16 @@ const ALL_NAVIGATION_ITEMS = [
   { label: "Destination Master", path: "/masters/destinations", icon: <Place />, moduleKey: MODULE_KEYS.DESTINATION_MASTER },
   { label: "Weight Master", path: "/masters/weights", icon: <Scale />, moduleKey: MODULE_KEYS.WEIGHT_MASTER },
   { label: "Vehicle Type Master", path: "/masters/vehicle-types", icon: <DirectionsCar />, moduleKey: MODULE_KEYS.VEHICLE_TYPE_MASTER },
-  { label: "Customer Master", path: "/masters/customers", icon: <Groups />, moduleKey: MODULE_KEYS.CUSTOMER_MASTER },
+  { label: "Customer / Supplier Master", path: "/masters/customers", icon: <Groups />, moduleKey: MODULE_KEYS.CUSTOMER_MASTER },
   { label: "Invoices", path: "/invoices", icon: <DashboardIcon />, moduleKey: MODULE_KEYS.INVOICES },
+  // Only users assigned to an approval workflow step (and admins).
+  { label: "Invoices Approvals", path: "/approvals", icon: <FactCheck />, moduleKey: null, approversOnly: true },
+  // Master changes held for approval - approvers, admins and every user
+  // who can add or edit a master.
+  { label: "Master Approvals", path: MASTER_APPROVALS_PATH, icon: <PendingActions />, moduleKey: null, masterApprovalsOnly: true },
   { label: "User Master", path: "/admin/users", icon: <ManageAccounts />, moduleKey: MODULE_KEYS.USER_MASTER },
-  { label: "Settings & Hierarchy", path: "/admin/settings", icon: <Settings />, moduleKey: MODULE_KEYS.SETTINGS_HIERARCHY },
+  { label: "Hierarchy & Approval Workflow", path: "/admin/settings", icon: <Settings />, moduleKey: MODULE_KEYS.SETTINGS_HIERARCHY },
+  { label: "Master Approval Workflow", path: MASTER_APPROVAL_SETTINGS_PATH, icon: <AccountTree />, moduleKey: null, adminOnly: true },
   { label: "Access Requests", path: "/admin/access-requests", icon: <ManageAccounts />, moduleKey: MODULE_KEYS.USER_MASTER },
   { label: "Reports", path: "/reports", icon: <Assessment />, moduleKey: MODULE_KEYS.REPORTS },
   { label: "My Profile", path: "/profile", icon: <Person />, moduleKey: null },
@@ -103,9 +114,21 @@ const DashboardLayout = () => {
     };
   }, []);
 
+  const isAdmin =
+    permissions.isAdmin ||
+    String(user?.role?.RoleName || "").trim().toLowerCase() === "admin";
+
+  const hasAnyMasterWrite = MASTER_APPROVAL_MODULE_KEYS.some((moduleKey) => {
+    const modulePermission = permissions.modulePermissions?.[moduleKey];
+    return Boolean(modulePermission?.CanAdd || modulePermission?.CanEdit);
+  });
+
   const navigationItems = ALL_NAVIGATION_ITEMS.filter((item) => {
+    if (item.adminOnly) return isAdmin;
+    if (item.masterApprovalsOnly) return isAdmin || Boolean(permissions.isMasterApprover) || hasAnyMasterWrite;
+    if (item.approversOnly) return isAdmin || Boolean(permissions.isWorkflowApprover);
     if (!item.moduleKey) return true;
-    if (permissions.isAdmin) return true;
+    if (isAdmin) return true;
     return Boolean(permissions.modulePermissions?.[item.moduleKey]?.CanView);
   });
 
@@ -282,6 +305,12 @@ const DashboardLayout = () => {
                 </ListItemIcon>
                 My Profile
               </MenuItem>
+              <MenuItem onClick={() => { handleMenuClose(); navigate("/profile#change-password"); }}>
+                <ListItemIcon sx={{ minWidth: 30 }}>
+                  <LockReset fontSize="small" />
+                </ListItemIcon>
+                Change password
+              </MenuItem>
               <MenuItem onClick={handleLogoutClick} sx={{ color: "#DC2626" }}>
                 <ListItemIcon sx={{ color: "#DC2626", minWidth: 30 }}>
                   <Logout fontSize="small" />
@@ -436,7 +465,8 @@ const DashboardLayout = () => {
         }}
       >
         <Box sx={{ maxWidth: "1800px", mx: "auto" }}>
-          <Outlet />
+          {/* Pages (e.g. Add / Edit Invoice) size their layout by the sidebar state */}
+          <Outlet context={{ isSidebarCollapsed }} />
         </Box>
       </Box>
     </Box>

@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { Vendor, VendorGST, sequelize } = require("../models");
+const { buildCreatedRemark, buildUpdatedRemark, normalizeUserRemark } = require("../utils/systemRemarks");
 
 /**
  * Helper function to derive Indian State name from the first 2 digits of a GST number
@@ -25,7 +26,7 @@ const getStateFromGST = (gstNumber) => {
 /**
  * Create a new vendor along with their associated GST details using a transaction
  */
-const createVendor = async (vendorData, transaction = null) => {
+const createVendor = async (vendorData, transaction = null, user = null) => {
   const isExternalTransaction = !!transaction;
   const t = transaction || (await sequelize.transaction());
 
@@ -65,6 +66,8 @@ const createVendor = async (vendorData, transaction = null) => {
         MobileNo: vendorData.MobileNo ? String(vendorData.MobileNo) : null,
         PANNo: vendorData.PANNo || null,
         IsActive: vendorData.IsActive !== undefined ? Boolean(vendorData.IsActive) : true,
+        UserRemarks: normalizeUserRemark(vendorData.UserRemarks),
+        Remarks: buildCreatedRemark(user),
       },
       { transaction: t }
     );
@@ -104,31 +107,6 @@ const createVendor = async (vendorData, transaction = null) => {
     }
     throw error;
   }
-};
-
-const createVendorGST = async (gstList, transaction = null) => {
-  return VendorGST.bulkCreate(gstList, { transaction });
-};
-
-const findVendorByPAN = async (panNo, transaction = null) => {
-  return Vendor.findOne({
-    where: { PANNo: panNo },
-    transaction,
-  });
-};
-
-const findVendorByCode = async (vendorCode, transaction = null) => {
-  return Vendor.findOne({
-    where: { VendorCode: vendorCode },
-    transaction,
-  });
-};
-
-const findGST = async (gstNumber, transaction = null) => {
-  return VendorGST.findOne({
-    where: { GSTNumber: gstNumber },
-    transaction,
-  });
 };
 
 const getVendorById = async (vendorId, transaction = null) => {
@@ -207,11 +185,13 @@ const getAllVendors = async ({
   };
 };
 
-const updateVendor = async (vendorId, vendorData, transaction = null) => {
+const updateVendor = async (vendorId, vendorData, transaction = null, user = null) => {
   const isExternalTransaction = !!transaction;
   const t = transaction || (await sequelize.transaction());
 
   try {
+    const existingVendor = await Vendor.findByPk(vendorId, { attributes: ["Remarks"], transaction: t });
+
     // 1. Main Vendor Details Update Karo
     await Vendor.update(
       {
@@ -222,6 +202,8 @@ const updateVendor = async (vendorId, vendorData, transaction = null) => {
         MobileNo: vendorData.MobileNo ? String(vendorData.MobileNo) : null,
         PANNo: vendorData.PANNo,
         IsActive: vendorData.IsActive !== undefined ? Boolean(vendorData.IsActive) : true,
+        UserRemarks: normalizeUserRemark(vendorData.UserRemarks),
+        Remarks: buildUpdatedRemark(existingVendor?.Remarks, user),
       },
       {
         where: { VendorID: vendorId },
@@ -310,13 +292,6 @@ const updateVendor = async (vendorId, vendorData, transaction = null) => {
   }
 };
 
-const deleteVendorGST = async (vendorId, transaction = null) => {
-  return VendorGST.destroy({
-    where: { VendorID: vendorId },
-    transaction,
-  });
-};
-
 const deleteVendor = async (vendorId, transaction = null) => {
   return Vendor.destroy({
     where: { VendorID: vendorId },
@@ -327,7 +302,7 @@ const deleteVendor = async (vendorId, transaction = null) => {
 /**
  * Bulk upload vendors with multi-GST support, automatic state deduction, and default mapping.
  */
-const bulkUploadVendors = async (rawData) => {
+const bulkUploadVendors = async (rawData, user = null) => {
   const transaction = await sequelize.transaction();
   try {
     let successCount = 0;
@@ -356,6 +331,8 @@ const bulkUploadVendors = async (rawData) => {
           MobileNo: row.MobileNo ? String(row.MobileNo) : null,
           PANNo: row.PANNo || null,
           IsActive: row.IsActive !== undefined ? Boolean(row.IsActive) : true,
+          UserRemarks: normalizeUserRemark(row.UserRemarks),
+          Remarks: buildCreatedRemark(user, "Bulk upload"),
         }, { transaction });
 
         const gstFields = [row.GSTNumber1, row.GSTNumber2, row.GSTNumber3, row.GSTNumber4];
@@ -399,14 +376,9 @@ const bulkUploadVendors = async (rawData) => {
 
 module.exports = {
   createVendor,
-  createVendorGST,
-  findVendorByPAN,
-  findVendorByCode,
-  findGST,
   getVendorById,
   getAllVendors,
   updateVendor,
-  deleteVendorGST,
   deleteVendor,
   bulkUploadVendors,
 };

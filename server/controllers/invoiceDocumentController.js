@@ -4,7 +4,6 @@ const {
   InvoiceVerification, 
   Vendor, 
   VendorGST, 
-  ContractMaster, 
   ContractRateMatrix, 
   DestinationMaster, 
   VehicleType,
@@ -15,22 +14,35 @@ const {
 } = require("../models");
 const sequelize = require("../config/database");
 const { Op } = require("sequelize"); 
-const nodemailer = require("nodemailer");
 const fs = require('fs');
 const path = require('path');
 const { resolveValidPlant } = require("../utils/plantHelper");
 const { isForeignKeyViolationForTable } = require("../utils/dbErrorHelper");
 const { normalizeDateForDb } = require("../utils/dateFormatter");
-const { getRecipientEmailForLocation } = require("../utils/approvalConfigHelper");
+const { getInvoiceAccessWhere } = require("../utils/invoiceAccess");
+const { getLocationAccess, assertCanAddInvoice, assertCanEditInvoice } = require("../utils/locationAccess");
 const { INVALID_PLANT_LOCATION_MESSAGE } = require("../constants/messages");
-const { DEFAULT_NOTIFICATION_EMAIL } = require("../constants/email");
+const { MIN_FREIGHT_CHARGE, MIN_FREIGHT_CHARGE_MESSAGE, MAX_SO_NUMBER_LENGTH } = require("../constants/invoiceRules");
 const { PENDING_VERIFICATION_STATUS_NAME, VERIFICATION_STATUS_APPROVED, VERIFICATION_STATUS_DISCREPANCY, VERIFICATION_STATUS_PRE_APPROVED } = require("../constants/invoiceStatus");
 const notificationService = require("../services/notification.service");
+const { findContractForInvoice, findRateForVehicleType, computeTypedContractAudit } = require("../services/invoiceAudit.service");
+const approvalWorkflowService = require("../services/approvalWorkflow.service");
+const { deliverNotices, withMailWarnings } = require("../services/approvalMail.service");
+const { ROUTING_OUTCOMES } = require("../constants/approvalWorkflow");
+const { INVOICE_DOCUMENT_RULE, findUploadRuleViolation, findTotalSizeViolation } = require("../constants/uploadRules");
+const {
+  CONTRACT_TYPES,
+  DEFAULT_CONTRACT_TYPE,
+  KG_BASED_CONTRACT_TYPES,
+  normalizeInvoiceType,
+  isAdHocInvoiceType,
+} = require("../constants/contractTypes");
 const {
   NOTIFICATION_TYPE_INVOICE_CREATED,
   NOTIFICATION_TYPE_DISCREPANCY_DETECTED,
-  NOTIFICATION_TYPE_EMAIL_SENT,
 } = require("../constants/notificationTypes");
+const { getPartyLabelForContractType } = require("../constants/partyTypes");
+const { normalizeUserRemark } = require("../utils/systemRemarks");
 
 // State mapping dictionary based on GST number prefix
 const GST_STATE_MAP = {
@@ -61,6 +73,17 @@ const normalizeRequiredDateForDb = (value, fieldName) => {
 
 const normalizeOptionalDateForDb = (value) => normalizeDateForDb(value) || null;
 
+const parseOptionalNumber = (value, fieldName) => {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return null;
+  }
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} must be a valid number.`);
+  }
+  return parsed;
+};
+
 const safeNotify = async (payload, transaction) => {
   try {
     await notificationService.notify(payload, transaction);
@@ -69,273 +92,54 @@ const safeNotify = async (payload, transaction) => {
   }
 };
 
-// Configure Nodemailer transporter for email notifications
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: DEFAULT_NOTIFICATION_EMAIL,
-    pass: process.env.EMAIL_PASS || ""
-  }
-});
-
-// Function to send audit discrepancy notification emails with attachments
-const sendAuditNotificationEmail = async (invoiceData, recipientEmail, attachmentsList = []) => {
-  try {
-    if (!recipientEmail) return false;
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { background-color: #f4f7f6; font-family: Arial, sans-serif; color: #333333; margin: 0; padding: 20px; }
-          .email-container { max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e0e0e0; }
-          .email-header { background-color: #1a365d; color: #ffffff; padding: 24px; text-align: center; }
-          .email-body { padding: 24px; background-color: #fafbfc; }
-          .section-title { font-size: 16px; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 20px; margin-bottom: 12px; }
-          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; background-color: #ffffff; border-radius: 6px; overflow: hidden; border: 1px solid #edf2f7; }
-          .info-table td { padding: 10px 14px; font-size: 14px; border-bottom: 1px solid #edf2f7; }
-          .info-table td.label { font-weight: bold; color: #4a5568; width: 35%; background-color: #f7fafc; }
-          .alert-box { background-color: #fffaf0; border-left: 4px solid #dd6b20; padding: 12px 16px; margin-bottom: 20px; border-radius: 4px; }
-          .badge { display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: bold; border-radius: 4px; background-color: #fed7d7; color: #9b2c2c; }
-          .remarks-box { background-color: #edf2f7; padding: 12px 16px; border-radius: 4px; font-size: 13px; color: #2d3748; font-style: italic; }
-          .email-footer { text-align: center; padding: 16px; font-size: 12px; color: #a0aec0; background-color: #f7fafc; border-top: 1px solid #e2e8f0; }
-        </style>
-      </head>
-      <body>
-        <div class="email-container">
-          <div class="email-header">
-            <h2>Freight Invoice Audit & Approval Alert</h2>
-          </div>
-          <div class="email-body">
-            <p style="margin-top: 0; font-size: 14px;">Dear Operations Team,</p>
-            <p style="font-size: 14px;">An invoice entry requires your review due to conditional audit discrepancies or rate mismatches:</p>
-            
-            <div class="alert-box">
-              <div style="font-weight: bold; margin-bottom: 8px; color: #744210; font-size: 14px;">Triggered Audit Conditions:</div>
-              <ul>
-                ${invoiceData.hasExtraCharge ? `<li><strong>Extra Charge Applied:</strong> ₹ ${invoiceData.extraCharge.toFixed(2)}</li>` : ""}
-                ${invoiceData.hasDetainCharge ? `<li><strong>Detention Charge Applied:</strong> ₹ ${invoiceData.detainCharge.toFixed(2)}</li>` : ""}
-                ${invoiceData.hasContractMatchFailure ? `<li><strong>Contract Match Failure:</strong> No active contract found for Vendor.</li>` : ""}
-                ${invoiceData.hasVehicleTypeNotFound ? `<li><strong>Vehicle Type Error:</strong> Vehicle type is not available in master.</li>` : ""}
-                ${invoiceData.hasVehicleTypeMismatch ? `<li><strong>Vehicle Type / Rate Mismatch:</strong> Mismatch detected in vehicle type capacity or destination rate matrix.</li>` : ""}
-              </ul>
-            </div>
-
-            <div class="section-title">📋 Invoice Summary Details</div>
-            <table class="info-table">
-              <tr><td class="label">Invoice Number</td><td><strong>${invoiceData.invoiceNo}</strong></td></tr>
-              <tr><td class="label">Customer Name</td><td>${invoiceData.CustomerName}</td></tr>
-              <tr><td class="label">Invoice Date</td><td>${invoiceData.invoiceDate}</td></tr>
-              <tr><td class="label">LR Date</td><td>${invoiceData.lrDate}</td></tr>
-              <tr><td class="label">Vendor Name</td><td>${invoiceData.vendorName} (${invoiceData.vendorCode})</td></tr>
-              <tr><td class="label">GST Number</td><td>${invoiceData.gstNumber}</td></tr>
-              <tr><td class="label">LR Number</td><td>${invoiceData.lrNo}</td></tr>
-              <tr><td class="label">Route</td><td>${invoiceData.LocationName} → ${invoiceData.toStation}</td></tr>
-              <tr><td class="label">Actual Weight</td><td>${invoiceData.actualWeight} MT</td></tr>
-            </table>
-
-            <div class="section-title">💰 Financial Breakdown</div>
-            <table class="info-table">
-              <tr><td class="label">Billed Freight</td><td>₹ ${invoiceData.freightCharge.toFixed(2)}</td></tr>
-              <tr><td class="label">Expected Freight</td><td>₹ ${invoiceData.calculatedExpectedFreight.toFixed(2)}</td></tr>
-              <tr><td class="label">Net Variance</td><td><strong>₹ ${invoiceData.variance.toFixed(2)}</strong></td></tr>
-              <tr><td class="label">Audit Status</td><td><span class="badge">${invoiceData.finalAuditDecision}</span></td></tr>
-            </table>
-
-            <div class="section-title">💬 Audit Remarks</div>
-            <div class="remarks-box">"${invoiceData.auditRemarks}"</div>
-          </div>
-          <div class="email-footer">Freight Contract Management System Automation</div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    let mailAttachments = [];
-    if (attachmentsList && attachmentsList.length > 0) {
-      mailAttachments = attachmentsList.filter(Boolean).map(item => {
-        const absolutePath = path.resolve(item.filePath);
-        if (fs.existsSync(absolutePath)) {
-          return {
-            filename: item.originalName,
-            path: absolutePath
-          };
-        }
-        return null;
-      }).filter(Boolean);
-    }
-
-    await transporter.sendMail({
-      from: DEFAULT_NOTIFICATION_EMAIL,
-      to: recipientEmail,
-      subject: `Action Required: Freight Audit Discrepancy — Invoice [${invoiceData.invoiceNo}]`,
-      html: htmlContent,
-      attachments: mailAttachments
-    });
-
-    return true;
-  } catch (emailError) {
-    console.error("Failed to send audit notification email:", emailError);
-    return false;
-  }
-};
-
-// Maps the persisted VerificationStatus value to the same label the
-// Invoice List page's status Chip shows (see InvoiceList.jsx statusConfig),
-// so the emailed table reads the same as the on-screen table.
-const INVOICE_STATUS_LABELS = {
-  PRE_APPROVED: "Pre-Approved",
-  APPROVED: "Approved",
-  DISCREPANCY: "Discrepancy",
-};
-
-// Renders a stored Doc path as just its filename for the email table - the
-// actual files are attached to the email itself (see sendSelectedInvoicesMail),
-// so the table only needs to name them, not link to a local server path.
-const docFileName = (docPath) => {
-  if (!docPath) return "-";
-  return String(docPath).replace(/\\/g, "/").split("/").pop();
-};
-
-// Builds the summary table rows HTML for a group of invoices. Mirrors the
-// Invoice List page's table columns exactly (see InvoiceList.jsx) - minus
-// the selection checkbox and the Edit action, which have no meaning here.
-const buildInvoiceSummaryRowsHtml = (invoices) => invoices.map((inv, idx) => {
-  const extraCharged = parseFloat(inv.VarianceAmount || 0);
-  const extraChargedDisplay = extraCharged <= 15 ? "0.00" : extraCharged.toFixed(2);
-
-  return `
-  <tr>
-    <td style="border: 1px solid #ddd; padding: 8px;">${idx + 1}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.LocationName || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.UploadedDateStr || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.InvoiceNumber || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.InvoiceDate || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.CustomerName || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.GSTNumber || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.LRDate || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.LRNumber || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.VehicleType || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.LocationName || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.ToStation || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${parseFloat(inv.ActualWeight || 0)} MT</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${parseFloat(inv.BasicFreight || 0).toFixed(2)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${parseFloat(inv.DetainCharges || 0).toFixed(2)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${parseFloat(inv.ExtraCharges || 0).toFixed(2)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${parseFloat(inv.TotalInvoiceAmount || 0).toFixed(2)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.PreAppr || 'No'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${INVOICE_STATUS_LABELS[inv.AuditStatus] || inv.AuditStatus || '-'}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${parseFloat(inv.ExpectedAmount || 0).toFixed(2)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">₹${extraChargedDisplay}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${docFileName(inv.Doc1Path)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${docFileName(inv.Doc2Path)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${docFileName(inv.Doc3Path)}</td>
-    <td style="border: 1px solid #ddd; padding: 8px;">${inv.Remarks || '-'}</td>
-  </tr>
-`;
-}).join('');
-
-// Builds the full summary report HTML for a group of invoices
-const buildInvoiceSummaryTableHtml = (invoices) => `
-  <h3>Selected Invoices Summary Report</h3>
-  <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 13px;">
-    <thead>
-      <tr style="background-color: #f2f2f2;">
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">#</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Location</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Upload Date</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Invoice No</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Invoice Date</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Customer Name</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">GST Number</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">LR Date</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">LR No</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Vehicle Type</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">From</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">To</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Weight (MT)</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Freight Chg</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Detain Chg</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Extra Chg</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Total Amount</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Pre-Appr</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Status</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Actual Contract Price</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Extra Charged</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Doc 1</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Doc 2</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Doc 3</th>
-        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Remarks</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${buildInvoiceSummaryRowsHtml(invoices)}
-    </tbody>
-  </table>
-`;
-
-// Groups invoices by their PlantID so each location gets its own email,
-// routed to that location's ApprovalConfig recipient.
-const UNASSIGNED_PLANT_GROUP_KEY = "unassigned";
-
-const groupInvoicesByPlantId = (invoices) => {
-  return invoices.reduce((groups, invoice) => {
-    const plantId = invoice.PlantID ?? invoice.plantId ?? UNASSIGNED_PLANT_GROUP_KEY;
-    const groupKey = String(plantId);
-    if (!groups[groupKey]) {
-      groups[groupKey] = [];
-    }
-    groups[groupKey].push(invoice);
-    return groups;
-  }, {});
-};
-
-// Function to send selected invoices summary report via email from the frontend,
-// grouped by plant/location so each location's ApprovalConfig recipient gets
-// only the invoices belonging to their location.
+// "Send Selected Mail" on the Invoice List. Each selected invoice goes to
+// whoever it is waiting for (reminder), older pending invoices start their
+// approval workflow, and the rest go as a summary to the first approvers
+// of their location - see approvalWorkflow.service.js.
 const sendSelectedInvoicesMail = async (req, res) => {
   try {
-    const { invoices } = req.body;
-    if (!invoices || !Array.isArray(invoices) || invoices.length === 0) {
-      return res.status(400).json({ message: "No invoices provided to send via email." });
+    const body = req.body || {};
+    const requestedIds = Array.isArray(body.invoiceIds)
+      ? body.invoiceIds
+      : Array.isArray(body.invoices)
+        ? body.invoices.map((invoice) => invoice?.InvoiceID ?? invoice?.id)
+        : [];
+    const invoiceIds = [...new Set(requestedIds.map((id) => String(id ?? "").trim()))];
+
+    if (!invoiceIds.length || invoiceIds.some((id) => !/^\d+$/.test(id) || Number(id) <= 0)) {
+      return res.status(400).json({ message: "No valid invoice IDs were provided." });
     }
 
-    const invoiceGroupsByPlantId = groupInvoicesByPlantId(invoices);
+    const accessWhere = await getInvoiceAccessWhere(req.user);
+    const accessibleCount = await InvoiceHeader.count({
+      where: {
+        [Op.and]: [
+          { InvoiceID: { [Op.in]: invoiceIds } },
+          ...(accessWhere ? [accessWhere] : []),
+        ],
+      },
+    });
 
-    for (const [plantId, groupInvoices] of Object.entries(invoiceGroupsByPlantId)) {
-      const isUnassignedGroup = plantId === UNASSIGNED_PLANT_GROUP_KEY;
-      const recipientEmail = await getRecipientEmailForLocation(isUnassignedGroup ? null : plantId);
-      const groupLocationName = groupInvoices[0]?.LocationName || "Unassigned Location";
-
-      // Attach every uploaded document across this group's invoices, so the
-      // approval recipient has the source files alongside the summary
-      // table, the same way sendAuditNotificationEmail already does.
-      const mailAttachments = groupInvoices
-        .flatMap(inv => [inv.Doc1Path, inv.Doc2Path, inv.Doc3Path])
-        .filter(Boolean)
-        .map(docPath => {
-          const absolutePath = path.resolve(docPath);
-          return fs.existsSync(absolutePath)
-            ? { filename: docFileName(docPath), path: absolutePath }
-            : null;
-        })
-        .filter(Boolean);
-
-      await transporter.sendMail({
-        from: DEFAULT_NOTIFICATION_EMAIL,
-        to: recipientEmail,
-        subject: `Selected Invoices Summary Report — ${groupLocationName} (${groupInvoices.length} Items)`,
-        html: buildInvoiceSummaryTableHtml(groupInvoices),
-        attachments: mailAttachments
+    if (accessibleCount !== invoiceIds.length) {
+      return res.status(403).json({
+        success: false,
+        message: "One or more selected invoices are unavailable or outside your assigned approval location.",
       });
     }
 
-    return res.status(200).json({ success: true, message: "Selected invoices email sent successfully!" });
+    const notices = await approvalWorkflowService.prepareSelectedInvoiceNotices({ invoiceIds, user: req.user });
+    const { failures } = await deliverNotices(notices);
+    if (failures.length === notices.length) {
+      return res.status(500).json({ success: false, message: withMailWarnings("No email was sent.", failures) });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: withMailWarnings(`Mail sent for ${invoiceIds.length} invoice(s).`, failures),
+    });
   } catch (error) {
     console.error("Error sending selected invoices mail:", error);
-    return res.status(500).json({ success: false, message: error.message || "Failed to send email." });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to send email." });
   }
 };
 
@@ -370,9 +174,7 @@ const resolveVendorAndGst = async (gstNumber, customerNameFallback, transaction)
 };
 
 // Writes a newly uploaded attachment to disk with a unique filename and
-// returns its relative path, in the same style uploadDocument uses for
-// Doc1/2/3 on creation. Used only by updateInvoices - uploadDocument's own
-// inline per-document blocks are left untouched.
+// returns its relative path. Shared by uploadDocument and updateInvoices.
 const writeUploadedInvoiceFile = (file, idPart, slotLabel, uploadsDir) => {
   const originalName = file.originalname || `${slotLabel}.pdf`;
   const fileExt = path.extname(originalName);
@@ -381,6 +183,93 @@ const writeUploadedInvoiceFile = (file, idPart, slotLabel, uploadsDir) => {
   const fullPath = path.join(uploadsDir, uniqueFileName);
   fs.writeFileSync(fullPath, file.buffer);
   return `uploads/${uniqueFileName}`;
+};
+
+const DOCUMENT_SLOTS = ["doc1", "doc2", "doc3"];
+
+// Attachments of one Add Invoice row. Trip lines of the same invoice share
+// a docGroup, so their files arrive once (doc1_<docGroup>, ...) and are
+// written once; every line of that invoice then points at the same paths.
+const resolveRowDocuments = ({ filesMap, docGroup, invoiceNo, uploadsDir, writtenDocs }) =>
+  DOCUMENT_SLOTS.map((slot) => {
+    const fieldName = `${slot}_${docGroup}`;
+    const file = filesMap[fieldName];
+    if (!file) return null;
+    if (!writtenDocs.has(fieldName)) {
+      writtenDocs.set(fieldName, {
+        filePath: writeUploadedInvoiceFile(file, invoiceNo, slot, uploadsDir),
+        originalName: file.originalname || `${slot}.pdf`,
+      });
+    }
+    return writtenDocs.get(fieldName);
+  });
+
+const rejectRow = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  throw error;
+};
+
+// A pre-approved invoice skips the contract audit and an Ad-Hoc invoice
+// has no contract, so both must carry at least one supporting document.
+const assertRequiredDocument = (typeFields, isPreApproved, documentPaths, invoiceNo) => {
+  if (documentPaths.some(Boolean)) return;
+  if (typeFields.isAdHoc) {
+    rejectRow(`Ad-Hoc invoice '${invoiceNo || "-"}' needs at least one supporting document.`);
+  }
+  if (isPreApproved) {
+    rejectRow(`Pre-Approved invoice '${invoiceNo || "-"}' needs at least one supporting document.`);
+  }
+};
+
+const getStoredFileSize = (relativePath) => {
+  try {
+    return fs.statSync(path.join(__dirname, "..", relativePath)).size;
+  } catch (error) {
+    return 0;
+  }
+};
+
+// The documents of one invoice (new uploads plus files it already has)
+// must stay within the per-invoice total. Checked only when a file is
+// added, so invoices saved under the older, larger limit stay editable.
+const assertDocumentsTotal = ({ newFiles, existingPaths = [], invoiceNo }) => {
+  if (!newFiles.length) return;
+  const sizes = [...newFiles.map((file) => file.size), ...existingPaths.filter(Boolean).map(getStoredFileSize)];
+  const violation = findTotalSizeViolation(sizes, INVOICE_DOCUMENT_RULE, `Invoice '${invoiceNo || "-"}'`);
+  if (violation) rejectRow(violation);
+};
+
+// Files written by a request that then failed are removed, so a rolled
+// back save never leaves unused documents on disk.
+const removeWrittenFiles = (relativePaths) => {
+  relativePaths.forEach((relativePath) => {
+    fs.rmSync(path.join(__dirname, "..", relativePath), { force: true });
+  });
+};
+
+const normalizeSoNumber = (value) => String(value ?? "").trim().slice(0, MAX_SO_NUMBER_LENGTH) || null;
+
+// Every attachment of the request must match the invoice document rule.
+const assertDocumentRules = (filesMap) => {
+  Object.entries(filesMap).forEach(([fieldName, file]) => {
+    const violation = findUploadRuleViolation(file, INVOICE_DOCUMENT_RULE, `Attachment ${fieldName}`);
+    if (violation) rejectRow(violation);
+  });
+};
+
+// Vehicle based contract types (FTL) find the contract rate by vehicle
+// type, so it is mandatory for them; KG based and Ad-Hoc types do not use it.
+const assertVehicleTypeProvided = (typeFields, inputVehicleType, invoiceNo) => {
+  if (!typeFields.isKgBased && !typeFields.isAdHoc && !String(inputVehicleType || "").trim()) {
+    rejectRow(`Vehicle Type is required for invoice '${invoiceNo || "-"}'.`);
+  }
+};
+
+const assertPartyForCharges = (typeFields, partyName, detainCharge, extraCharge) => {
+  if ((detainCharge > 0 || extraCharge > 0) && !partyName) {
+    rejectRow(`${getPartyLabelForContractType(typeFields.contractType)} Name is required when Detain Charge or Extra Charge is entered.`);
+  }
 };
 
 // Resolves a VehicleType record from either a VehicleTypeID or a free-text
@@ -411,18 +300,20 @@ const resolveVehicleTypeFromInput = async (inputVehicleType, transaction) => {  
 // computed outcome. This is the single source of truth for "does the
 // contract rate match" logic, shared by uploadDocument (create) and
 // updateInvoices (edit) so both flows compute the matching status
-// identically and accurately.
+// identically. The contract rate is found on Destination + Vehicle Type
+// and compared with the invoice's Freight Charge.
 const computeContractAudit = async ({
-  vendorId, extractedPAN, toStation, actualWeight, resolvedVehicleTypeId,
+  vendorId, extractedPAN, toStation, resolvedVehicleTypeId,
   hasVehicleTypeNotFound, freightCharge, contractId
 }, transaction) => {
   // If the uploader explicitly selected a Contract No on the Add Invoice
   // grid (task item 9), audit against that specific contract instead of
   // whichever contract happens to be the vendor's current ACTIVE one -
   // the two usually agree, but an explicit selection should win.
-  const activeContract = contractId
-    ? await ContractMaster.findByPk(contractId, { transaction })
-    : await ContractMaster.findOne({ where: { VendorID: vendorId, Status: "ACTIVE" }, transaction });
+  const activeContract = await findContractForInvoice(
+    { contractId, vendorId, contractType: CONTRACT_TYPES.FTL_OUTBOUND },
+    transaction
+  );
 
   let calculatedExpectedFreight = 0;
   let targetContractId = null;
@@ -430,6 +321,7 @@ const computeContractAudit = async ({
   let finalAuditDecision = VERIFICATION_STATUS_DISCREPANCY;
   let matchedDestinationFound = false;
   let hasVehicleTypeMismatch = false;
+  let vehicleTypeName = "";
 
   const destination = await DestinationMaster.findOne({
     where: { City: { [Op.like]: toStation.trim() } },
@@ -445,60 +337,20 @@ const computeContractAudit = async ({
           ContractID: activeContract.ContractID,
           DestinationID: destination.DestinationID
         },
-        include: [
-          { model: VehicleType, as: "vehicleType" },
-          { model: WeightMaster, as: "weight" }
-        ],
+        include: [{ model: WeightMaster, as: "weight" }],
         transaction
       });
 
-      if (destinationMatrixEntries && destinationMatrixEntries.length > 0) {
+      if (destinationMatrixEntries.length > 0) {
         matchedDestinationFound = true;
-        let selectedMatrix = null;
-
-        // Sheet 1 (DOMESTIC DESTINATIONS) rows carry a WeightID and no
-        // VehicleTypeID; Sheet 2 (ADDITIONAL DESTINATIONS) rows carry a
-        // VehicleTypeID and no WeightID (see contract.service.js's
-        // processRateMatrixExcel, which imports each sheet this way). A
-        // given destination's rows all come from one sheet or the other,
-        // so whichever set is present tells us which key - Weight or
-        // Vehicle Type - to match this invoice on, alongside Destination.
-        const vehicleKeyedEntries = destinationMatrixEntries.filter(m => m.VehicleTypeID !== null);
-        const weightKeyedEntries = destinationMatrixEntries.filter(m => m.WeightID !== null);
-
-        if (vehicleKeyedEntries.length > 0) {
-          // Sheet 2: match on Destination + Vehicle Type.
-          selectedMatrix = vehicleKeyedEntries.find(m => String(m.VehicleTypeID) === String(resolvedVehicleTypeId));
-          if (!selectedMatrix) hasVehicleTypeMismatch = true;
-        } else if (weightKeyedEntries.length > 0) {
-          // Sheet 1: match on Destination + Weight - the nearest weight
-          // slab at or above the invoice's actual weight.
-          selectedMatrix = weightKeyedEntries
-            .filter(m => m.weight && parseFloat(m.weight.Weight || 0) >= actualWeight)
-            .sort((a, b) => parseFloat(a.weight.Weight || 0) - parseFloat(b.weight.Weight || 0))[0] || null;
-
-          if (!selectedMatrix) {
-            // No slab covers this weight - fall back to the highest
-            // available slab rather than leaving the invoice unmatched.
-            const validEntries = weightKeyedEntries.filter(m => m.weight && m.weight.Weight !== undefined);
-            if (validEntries.length > 0) {
-              validEntries.sort((a, b) => parseFloat(b.weight.Weight || 0) - parseFloat(a.weight.Weight || 0));
-              selectedMatrix = validEntries[0];
-            }
-          }
-        }
-
-        // Last-resort fallback so any existing rate matrix entry for this
-        // destination is used rather than none at all, matching the prior
-        // "always resolve to something if entries exist" behavior.
-        if (!selectedMatrix) {
-          selectedMatrix = destinationMatrixEntries[0];
-        }
+        const vehicleTypeRecord = await VehicleType.findByPk(resolvedVehicleTypeId, { transaction });
+        vehicleTypeName = vehicleTypeRecord?.VehicleName || "";
+        const selectedMatrix = vehicleTypeRecord ? findRateForVehicleType(destinationMatrixEntries, vehicleTypeRecord) : null;
 
         if (selectedMatrix) {
-          const matrixBaseRate = parseFloat(selectedMatrix.BaseRate || 0);
-          calculatedExpectedFreight = matrixBaseRate;
-          auditRemarks = `Contract matched successfully. Destination: '${toStation}', Base Rate: Rs ${matrixBaseRate.toFixed(2)}.`;
+          calculatedExpectedFreight = parseFloat(selectedMatrix.BaseRate || 0);
+        } else {
+          hasVehicleTypeMismatch = true;
         }
       }
     }
@@ -522,12 +374,12 @@ const computeContractAudit = async ({
     auditRemarks = `Destination '${toStation}' is not available in the contract rate matrix.`;
   } else if (hasVehicleTypeMismatch) {
     finalAuditDecision = VERIFICATION_STATUS_DISCREPANCY;
-    auditRemarks = `Vehicle type or rate capacity mismatch for destination '${toStation}'.`;
+    auditRemarks = `Vehicle type '${vehicleTypeName}' has no rate in the contract for destination '${toStation}'.`;
   } else {
     variance = freightCharge - calculatedExpectedFreight;
-    if (freightCharge <= calculatedExpectedFreight + 1.0 && !hasVehicleTypeMismatch) {
+    if (freightCharge <= calculatedExpectedFreight + 1.0) {
       finalAuditDecision = VERIFICATION_STATUS_APPROVED;
-      auditRemarks = `Verification passed successfully against contract rate of Rs ${calculatedExpectedFreight.toFixed(2)}.`;
+      auditRemarks = `Verification passed against contract rate of Rs ${calculatedExpectedFreight.toFixed(2)} (Destination: '${toStation}', Vehicle Type: '${vehicleTypeName}').`;
     } else {
       finalAuditDecision = VERIFICATION_STATUS_DISCREPANCY;
       auditRemarks = `Discrepancy detected! Expected rate: Rs ${calculatedExpectedFreight.toFixed(2)}, Billed: Rs ${freightCharge.toFixed(2)}, Variance: Rs ${variance.toFixed(2)}.`;
@@ -540,6 +392,108 @@ const computeContractAudit = async ({
     hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeMismatch
   };
 };
+
+const parseChargeValue = (value, fallback) =>
+  value !== undefined ? parseFloat(value || 0) || 0 : parseFloat(fallback || 0) || 0;
+
+// Reads the per contract type fields of an Add / Edit Invoice row. On edit,
+// fields the page does not send keep the invoice's stored values.
+const readContractTypeFields = (row, existingInvoice = null) => {
+  const current = existingInvoice || {};
+  const contractType = normalizeInvoiceType(row.contractType)
+    || normalizeInvoiceType(current.ContractType)
+    || DEFAULT_CONTRACT_TYPE;
+  const packages = row.packages !== undefined ? parseInt(row.packages, 10) : current.Packages;
+  const chargedWeight = row.chargedWeight !== undefined ? parseFloat(row.chargedWeight) : current.ChargedWeight;
+  const billedRate = row.billedRate !== undefined ? parseFloat(row.billedRate) : current.BilledRate;
+  const odaCategory = row.odaCategory !== undefined ? row.odaCategory : current.ODACategory;
+
+  return {
+    contractType,
+    isKgBased: KG_BASED_CONTRACT_TYPES.includes(contractType),
+    isAdHoc: isAdHocInvoiceType(contractType),
+    packages: Number.isFinite(packages) ? packages : null,
+    chargedWeight: Number.isFinite(parseFloat(chargedWeight)) ? parseFloat(chargedWeight) : null,
+    billedRate: Number.isFinite(parseFloat(billedRate)) ? parseFloat(billedRate) : null,
+    odaCategory: String(odaCategory || "").trim().toUpperCase() || null,
+    docketCharge: parseChargeValue(row.docketCharge, current.DocketCharges),
+    odaCharge: parseChargeValue(row.odaCharge, current.ODACharges),
+    fovCharge: parseChargeValue(row.fovCharge, current.FOVCharges),
+    loadingCharge: parseChargeValue(row.loadingCharge, current.LoadingCharges),
+    otherCharge: parseChargeValue(row.otherCharge, current.OtherCharges),
+  };
+};
+
+// Runs the audit that matches the invoice's contract type. FTL Outbound
+// keeps the original per-trip audit; the other types use invoiceAudit.service.
+// Rejects a freight charge below the contract minimum (blank / 0 included).
+const assertMinimumFreightCharge = (freightCharge, invoiceNumber) => {
+  if (freightCharge >= MIN_FREIGHT_CHARGE) return;
+  const error = new Error(`${MIN_FREIGHT_CHARGE_MESSAGE} Invoice '${invoiceNumber || "-"}' has ₹${freightCharge || 0}.`);
+  error.statusCode = 400;
+  throw error;
+};
+
+// An Ad-Hoc invoice has no contract: the billed freight is taken as the
+// expected value and the invoice always goes to the approvers.
+const buildAdHocAudit = (freightCharge) => ({
+  destination: null,
+  activeContract: null,
+  targetContractId: null,
+  calculatedExpectedFreight: freightCharge,
+  expectedCharges: 0,
+  finalAuditDecision: VERIFICATION_STATUS_DISCREPANCY,
+  auditRemarks: "Ad-Hoc invoice - no contract rate to verify, approval required.",
+  variance: 0,
+  hasContractMatchFailure: false,
+  hasDestinationMismatch: false,
+  hasVehicleTypeMismatch: false,
+});
+
+const runContractAudit = async ({ typeFields, city, actualWeight, freightCharge, ...auditInput }, transaction) => {
+  if (typeFields.isAdHoc) {
+    return buildAdHocAudit(freightCharge);
+  }
+  if (typeFields.contractType === CONTRACT_TYPES.FTL_OUTBOUND) {
+    const result = await computeContractAudit({ ...auditInput, toStation: city, freightCharge }, transaction);
+    return { ...result, expectedCharges: 0 };
+  }
+  return computeTypedContractAudit({
+    ...auditInput,
+    ...typeFields,
+    city,
+    actualWeight,
+    freightCharge,
+    hasVehicleTypeNotFound: typeFields.isKgBased ? false : auditInput.hasVehicleTypeNotFound,
+  }, transaction);
+};
+
+// Contract value of everything the invoice bills: contract freight and
+// contract charges plus the charges that are always paid at actual.
+const getTotalExpectedPrice = (audit, typeFields, detainCharge, extraCharge) =>
+  audit.calculatedExpectedFreight + audit.expectedCharges + detainCharge + extraCharge
+  + typeFields.loadingCharge + typeFields.otherCharge;
+
+// FTL Inbound invoices travel from the pick-up city (the grid's city
+// field) to the selected plant location; every other type goes from the
+// plant location to the grid's city.
+const getRouteStations = (typeFields, city, plantStation) =>
+  typeFields.contractType === CONTRACT_TYPES.FTL_INBOUND
+    ? { fromStation: city, toStation: plantStation }
+    : { fromStation: plantStation, toStation: city };
+
+const buildTypeColumnValues = (typeFields) => ({
+  ContractType: typeFields.contractType,
+  Packages: typeFields.packages,
+  ChargedWeight: typeFields.chargedWeight,
+  BilledRate: typeFields.billedRate,
+  DocketCharges: typeFields.docketCharge,
+  ODACategory: typeFields.odaCategory,
+  ODACharges: typeFields.odaCharge,
+  FOVCharges: typeFields.fovCharge,
+  LoadingCharges: typeFields.loadingCharge,
+  OtherCharges: typeFields.otherCharge,
+});
 
 // Applies the Pre-Approved override on top of a computed audit outcome.
 // A pre-approved invoice always displays and stores as Pre-Approved,
@@ -558,9 +512,31 @@ const applyPreApprovedOverride = (isPreApproved, auditResult) => {
   };
 };
 
+// Audit outcome -> workflow routing outcome.
+const getRoutingOutcome = (finalAuditDecision) => {
+  if (finalAuditDecision === VERIFICATION_STATUS_PRE_APPROVED) return ROUTING_OUTCOMES.PRE_APPROVED;
+  if (finalAuditDecision === VERIFICATION_STATUS_APPROVED) return ROUTING_OUTCOMES.SYSTEM_APPROVED;
+  return ROUTING_OUTCOMES.DISCREPANCY;
+};
+
+// The approver the uploader picked (e.g. HOD). Required whenever the
+// location's workflow has a step the uploader selects for.
+const resolveSelectedApprover = async (approverUserId, locationId, invoiceNo) => {
+  const selectable = locationId ? await approvalWorkflowService.getSelectableApprovers(locationId) : null;
+  if (!selectable) return null;
+  if (!approverUserId) {
+    rejectRow(`Select the ${selectable.stepName} approver for invoice '${invoiceNo || "-"}'.`);
+  }
+  if (!selectable.users.some((user) => Number(user.UserID) === Number(approverUserId))) {
+    rejectRow(`The selected approver of invoice '${invoiceNo || "-"}' is not an approver of this location.`);
+  }
+  return Number(approverUserId);
+};
+
 // Main controller to process and upload invoices, validate rules, and execute database transactions
 const uploadDocument = async (req, res) => {
   const transaction = await sequelize.transaction();
+  const writtenDocs = new Map();
   try {
     let invoicesPayload = req.body.invoices;
     if (typeof invoicesPayload === 'string') {
@@ -609,11 +585,17 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+    assertDocumentRules(filesMap);
+
     // Ensure uploads directory exists
     const uploadsDir = path.join(__dirname, '../uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
+    const workflowNotices = [];
+    // Locations the user may add invoices for (User Master > Settings &
+    // Hierarchy Access).
+    const locationAccess = await getLocationAccess(req.user.UserID, transaction);
 
     // Loop through each invoice row in the payload
     for (let i = 0; i < invoiceRows.length; i++) {
@@ -629,11 +611,11 @@ const uploadDocument = async (req, res) => {
       const invoiceDateFormatted = normalizeRequiredDateForDb(row.invoiceDate, "Invoice date");
       const lrDateFormatted = normalizeOptionalDateForDb(row.lrDate);
       const lrNo = String(row.lrNo || "").trim();
+      const soNumber = normalizeSoNumber(row.soNumber);
       const inputVehicleType = row.vehicleTypeId || row.vehicleType || null;
-      // Remarks the user actually typed on the Add Invoice grid. Captured
-      // separately from auditRemarks (computed further below) so the user's
-      // own input is never silently discarded before it reaches the DB.
-      const userRemarks = String(row.remarks || "").trim();
+      // "Remark by User" - stored in its own column, never mixed with the
+      // system generated audit remarks.
+      const userRemarks = normalizeUserRemark(row.userRemarks);
 
       // Resolve the actual Plants master record for this row up front so
       // PlantID and FromStation can reuse the same single lookup instead of
@@ -645,7 +627,7 @@ const uploadDocument = async (req, res) => {
       const plantCandidate = row.plantId || row.locationId || defaultPlant.PlantID;
       const resolvedPlant = await resolveValidPlant(plantCandidate, defaultPlant, transaction);
       const resolvedPlantId = resolvedPlant.PlantID;
-      const fromStation = resolvedPlant.LocationName || resolvedPlant.PlantName || "";
+      const plantStation = resolvedPlant.LocationName || resolvedPlant.PlantName || "";
 
       // Resolve the real hierarchy Location (PlantLocations) directly by
       // the ID the Add Invoice page actually selected, independent of
@@ -663,139 +645,73 @@ const uploadDocument = async (req, res) => {
         }
       }
 
-      const toStation = String(row.toStation || "").trim();
-      const actualWeight = parseFloat(row.actualWeight || 0);
+      const typeFields = readContractTypeFields(row);
+      const city = String(row.toStation || "").trim();
+      const { fromStation, toStation } = getRouteStations(typeFields, city, resolvedLocationName || plantStation);
+      const actualWeight = parseOptionalNumber(row.actualWeight, "Actual Weight");
       const freightCharge = parseFloat(row.freightCharge || 0);
       const detainCharge = parseFloat(row.detainCharge || 0);
       const extraCharge = parseFloat(row.extraCharge || 0);
       const totalBilledAmount = parseFloat(row.total || 0);
-
-      let doc1Path = null, doc2Path = null, doc3Path = null;
-      let doc1OriginalName = null, doc2OriginalName = null, doc3OriginalName = null;
-
-      const fileKey1 = `doc1_${i}`;
-      const fileKey2 = `doc2_${i}`;
-      const fileKey3 = `doc3_${i}`;
-
-      // Handle Document 1 file write
-      if (filesMap[fileKey1]) {
-        const file = filesMap[fileKey1];
-        doc1OriginalName = file.originalname || 'Document1.pdf';
-        const fileExt = path.extname(doc1OriginalName);
-        const safeInvoiceNo = invoiceNo.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const uniqueFileName = `inv_${safeInvoiceNo}_doc1_${Date.now()}${fileExt}`;
-        const fullPath = path.join(uploadsDir, uniqueFileName);
-        fs.writeFileSync(fullPath, file.buffer);
-        doc1Path = `uploads/${uniqueFileName}`;
-      }
-
-      // Handle Document 2 file write
-      if (filesMap[fileKey2]) {
-        const file = filesMap[fileKey2];
-        doc2OriginalName = file.originalname || 'Document2.pdf';
-        const fileExt = path.extname(doc2OriginalName);
-        const safeInvoiceNo = invoiceNo.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const uniqueFileName = `inv_${safeInvoiceNo}_doc2_${Date.now()}${fileExt}`;
-        const fullPath = path.join(uploadsDir, uniqueFileName);
-        fs.writeFileSync(fullPath, file.buffer);
-        doc2Path = `uploads/${uniqueFileName}`;
-      }
-
-      // Handle Document 3 file write
-      if (filesMap[fileKey3]) {
-        const file = filesMap[fileKey3];
-        doc3OriginalName = file.originalname || 'Document3.pdf';
-        const fileExt = path.extname(doc3OriginalName);
-        const safeInvoiceNo = invoiceNo.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const uniqueFileName = `inv_${safeInvoiceNo}_doc3_${Date.now()}${fileExt}`;
-        const fullPath = path.join(uploadsDir, uniqueFileName);
-        fs.writeFileSync(fullPath, file.buffer);
-        doc3Path = `uploads/${uniqueFileName}`;
-      }
-
       if (!gstNumber || !invoiceNo) continue;
+
+      assertMinimumFreightCharge(freightCharge, invoiceNo);
+      assertPartyForCharges(typeFields, CustomerName, detainCharge, extraCharge);
+      assertVehicleTypeProvided(typeFields, inputVehicleType, invoiceNo);
+      await assertCanAddInvoice({
+        user: req.user,
+        access: locationAccess,
+        locationId: resolvedLocationId,
+        locationName: resolvedLocationName,
+        invoiceNo,
+      });
+
+      const preApproval = String(row.preAppr || "No").trim();
+      const isPreApproved = preApproval.toLowerCase() === "yes" || preApproval === "1" || preApproval === true;
+
+      const docGroup = row.docGroup ?? i;
+      assertDocumentsTotal({ newFiles: DOCUMENT_SLOTS.map((slot) => filesMap[`${slot}_${docGroup}`]).filter(Boolean), invoiceNo });
+      const rowDocuments = resolveRowDocuments({ filesMap, docGroup, invoiceNo, uploadsDir, writtenDocs });
+      const [doc1Path, doc2Path, doc3Path] = rowDocuments.map((doc) => doc?.filePath || null);
+      assertRequiredDocument(typeFields, isPreApproved, [doc1Path, doc2Path, doc3Path], invoiceNo);
+      const selectedApproverUserId = await resolveSelectedApprover(row.approverUserId, resolvedLocationId, invoiceNo);
 
       // --- VENDOR & GST RESOLUTION (shared helper) ---
       const { vendor, vendorGst, extractedPAN } = await resolveVendorAndGst(gstNumber, CustomerName, transaction);
 
       // --- VEHICLE TYPE VALIDATION LOGIC (shared helper) ---
-      const { resolvedVehicleTypeId, hasVehicleTypeNotFound } = await resolveVehicleTypeFromInput(inputVehicleType, transaction);
+      const vehicleTypeResult = await resolveVehicleTypeFromInput(inputVehicleType, transaction);
+      const resolvedVehicleTypeId = vehicleTypeResult.resolvedVehicleTypeId;
+      const hasVehicleTypeNotFound = typeFields.isKgBased || typeFields.isAdHoc ? false : vehicleTypeResult.hasVehicleTypeNotFound;
 
       const evaluatedDistanceKM = 0;
 
       // --- CONTRACT-RATE AUDIT (shared helper) ---
-      const preApproval = String(row.preAppr || "No").trim();
-      const isPreApproved = preApproval.toLowerCase() === "yes" || preApproval === "1" || preApproval === true;
-
-      const rawAuditResult = await computeContractAudit({
+      const rawAuditResult = await runContractAudit({
+        typeFields,
+        city,
+        actualWeight,
+        freightCharge,
         vendorId: vendor.VendorID,
         extractedPAN,
-        toStation,
-        actualWeight,
         resolvedVehicleTypeId,
+        vehicleTypeId: resolvedVehicleTypeId,
         hasVehicleTypeNotFound,
-        freightCharge,
         contractId: row.contractId || null
       }, transaction);
 
-      const {
-        destination, targetContractId, calculatedExpectedFreight,
-        hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeMismatch
-      } = rawAuditResult;
-      let { finalAuditDecision, auditRemarks, variance } = applyPreApprovedOverride(isPreApproved, rawAuditResult);
+      const { destination, targetContractId, calculatedExpectedFreight } = rawAuditResult;
+      const { finalAuditDecision, auditRemarks, variance } = applyPreApprovedOverride(isPreApproved, rawAuditResult);
 
-      const hasExtraCharge = extraCharge > 0;
-      const hasDetainCharge = detainCharge > 0;
-
-      // Send email alert if discrepancies or extra charges are found and not pre-approved.
-      // On this initial creation, the confirmation goes to the submitting
-      // user's own inbox rather than the location's approval recipient -
-      // the approval recipient only gets notified once the invoice is
-      // later edited and resubmitted (see updateInvoices).
-      let emailStatusLog = "";
-      if (!isPreApproved && (hasExtraCharge || hasDetainCharge || hasContractMatchFailure || hasDestinationMismatch || hasVehicleTypeNotFound || hasVehicleTypeMismatch || finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY)) {
-        const recipientEmail = req.user?.Email || DEFAULT_NOTIFICATION_EMAIL;
-
-        if (finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY) {
-          await safeNotify({
-            type: NOTIFICATION_TYPE_DISCREPANCY_DETECTED,
-            message: `Discrepancy detected on invoice ${invoiceNo}: ${auditRemarks}`,
-          }, transaction);
-        }
-
-        const mailSent = await sendAuditNotificationEmail({
-          invoiceNo, CustomerName, invoiceDate: invoiceDateFormatted, lrDate: lrDateFormatted, vendorName: vendor.VendorName,
-          vendorCode: vendor.VendorCode, gstNumber, lrNo, fromStation, toStation,
-          actualWeight, freightCharge, calculatedExpectedFreight, totalBilledAmount,
-          variance, finalAuditDecision, auditRemarks, extraCharge, detainCharge,
-          hasExtraCharge, hasDetainCharge, hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeNotFound, hasVehicleTypeMismatch
-        }, recipientEmail, [
-          doc1Path ? { filePath: doc1Path, originalName: doc1OriginalName } : null, 
-          doc2Path ? { filePath: doc2Path, originalName: doc2OriginalName } : null, 
-          doc3Path ? { filePath: doc3Path, originalName: doc3OriginalName } : null
-        ]);
-
-        if (mailSent) {
-          emailStatusLog = ` | Mail Sent to: ${recipientEmail}`;
-          auditRemarks += emailStatusLog;
-
-          await safeNotify({
-            type: NOTIFICATION_TYPE_EMAIL_SENT,
-            message: `Audit notification email sent for invoice ${invoiceNo} to ${recipientEmail}.`,
-          }, transaction);
-        }
+      if (finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY) {
+        await safeNotify({
+          type: NOTIFICATION_TYPE_DISCREPANCY_DETECTED,
+          userIds: [req.user?.UserID],
+          message: `Discrepancy detected on invoice ${invoiceNo}: ${auditRemarks}`,
+        }, transaction);
       }
 
-      const totalExpectedPrice = calculatedExpectedFreight + detainCharge + extraCharge;
-
-      // The Remarks column stores what the user actually typed in the Add
-      // Invoice grid; the system's own audit outcome (auditRemarks) is
-      // appended after it for context instead of overwriting it, so nothing
-      // the user entered is ever lost. If the user left Remarks blank, the
-      // audit outcome alone is stored, same as before.
-      const remarksToStore = userRemarks
-        ? (auditRemarks ? `${userRemarks} | Audit: ${auditRemarks}` : userRemarks)
-        : auditRemarks;
+      const totalExpectedPrice = getTotalExpectedPrice(rawAuditResult, typeFields, detainCharge, extraCharge);
 
       // --- INSERT INTO INVOICE HEADER TABLE ---
       let insertedHeader;
@@ -803,28 +719,36 @@ const uploadDocument = async (req, res) => {
         [insertedHeader] = await sequelize.query(`
           INSERT INTO [InvoiceHeader] (
             [InvoiceNumber], [CustomerName], [InvoiceDate], [LRDate], [VendorID], [VendorGSTID], 
-            [PlantID], [LocationID], [LocationName], [ContractID], [LRNumber], [VehicleTypeID],
+            [PlantID], [LocationID], [LocationName], [ContractID], [LRNumber], [SONumber], [VehicleTypeID],
             [TotalWeight], [DistanceKM], [BasicFreight], [DetainCharges], 
             [ExtraCharges], [TotalInvoiceAmount], [InvoiceStatusID], [UploadedDate],
-            [FromStation], [ToStation], [Remarks], [IsPreApproved], [Doc1Path], [Doc2Path], [Doc3Path]
+            [FromStation], [ToStation], [Remarks], [UserRemarks], [IsPreApproved], [Doc1Path], [Doc2Path], [Doc3Path],
+            [ContractType], [Packages], [ChargedWeight], [BilledRate], [DocketCharges], [ODACategory],
+            [ODACharges], [FOVCharges], [LoadingCharges], [OtherCharges],
+            [UploadedBy], [SelectedApproverUserID]
           )
           OUTPUT INSERTED.[InvoiceID]
           VALUES (
             :invoiceNo, :CustomerName, :invoiceDate, :lrDate, :vendorId, :vendorGstId,
-            :plantId, :locationId, :locationName, :contractId, :lrNo, :vehicleTypeId,
+            :plantId, :locationId, :locationName, :contractId, :lrNo, :soNumber, :vehicleTypeId,
             :actualWeight, :distanceKm, :basicFreight, :detainCharges,
             :extraCharges, :totalAmount, :statusId, GETDATE(),
-            :locationName, :toStation, :remarks, :isPreApproved, :doc1, :doc2, :doc3
+            :fromStation, :toStation, :remarks, :userRemarks, :isPreApproved, :doc1, :doc2, :doc3,
+            :ContractType, :Packages, :ChargedWeight, :BilledRate, :DocketCharges, :ODACategory,
+            :ODACharges, :FOVCharges, :LoadingCharges, :OtherCharges,
+            :uploadedBy, :selectedApproverUserId
           );
         `, {
           replacements: {
             invoiceNo, CustomerName, invoiceDate: invoiceDateFormatted, lrDate: lrDateFormatted, 
             vendorId: vendor.VendorID, vendorGstId: vendorGst.VendorGSTID,
-            plantId: resolvedPlantId, locationId: resolvedLocationId, locationName: resolvedLocationName, contractId: targetContractId, lrNo, 
+            plantId: resolvedPlantId, locationId: resolvedLocationId, locationName: resolvedLocationName, contractId: targetContractId, lrNo, soNumber, 
             vehicleTypeId: resolvedVehicleTypeId, actualWeight, distanceKm: evaluatedDistanceKM, 
             basicFreight: freightCharge, detainCharges: detainCharge, extraCharges: extraCharge, 
             totalAmount: totalBilledAmount, statusId: statusIdToUse, fromStation, toStation, 
-            remarks: remarksToStore, isPreApproved: isPreApproved ? 1 : 0, doc1: doc1Path, doc2: doc2Path, doc3: doc3Path
+            remarks: auditRemarks, userRemarks, isPreApproved: isPreApproved ? 1 : 0, doc1: doc1Path, doc2: doc2Path, doc3: doc3Path,
+            uploadedBy: req.user.UserID, selectedApproverUserId,
+            ...buildTypeColumnValues(typeFields)
           },
           type: sequelize.QueryTypes.INSERT,
           transaction
@@ -840,6 +764,7 @@ const uploadDocument = async (req, res) => {
 
       await safeNotify({
         type: NOTIFICATION_TYPE_INVOICE_CREATED,
+        userIds: [req.user?.UserID],
         message: `New invoice ${invoiceNo} uploaded for ${CustomerName || vendor.VendorName}.`,
         relatedInvoiceId: newInvoiceID,
       }, transaction);
@@ -870,23 +795,35 @@ const uploadDocument = async (req, res) => {
         type: sequelize.QueryTypes.INSERT,
         transaction
       });
+
+      // --- APPROVAL WORKFLOW: history + routing by audit outcome ---
+      await approvalWorkflowService.recordInvoiceCreated({ invoiceId: newInvoiceID, actorUserId: req.user.UserID, draftId: req.body.draftId }, transaction);
+      const workflow = await approvalWorkflowService.startWorkflow({
+        invoiceId: newInvoiceID,
+        outcome: getRoutingOutcome(finalAuditDecision),
+        actorUserId: req.user.UserID,
+      }, transaction);
+      workflowNotices.push(...workflow.notices);
     }
 
     await transaction.commit();
+    const { failures } = await deliverNotices(workflowNotices);
     return res.status(201).json({
       success: true,
-      message: "Invoices processed successfully with files saved and mail sent with original names!",
+      message: withMailWarnings("Invoices saved and sent through the approval workflow.", failures),
     });
 
   } catch (error) {
     if (transaction && !transaction.finished) {
       try { await transaction.rollback(); } catch(e) { console.error("Rollback error", e); }
     }
+    removeWrittenFiles([...writtenDocs.values()].map((doc) => doc.filePath));
     console.error("CRITICAL UPLOAD ERROR:", error.original || error);
-    const isClientError = /required and must be a valid date|Invalid JSON format in invoices payload|No invoice records provided/i.test(
+    const isClientError = error.statusCode === 400 || /required and must be a valid date|Invalid JSON format in invoices payload|No invoice records provided/i.test(
       error.message || ""
     );
-    return res.status(isClientError ? 400 : 500).json({
+    const statusCode = error.statusCode === 403 ? 403 : isClientError ? 400 : 500;
+    return res.status(statusCode).json({
       success: false,
       message: error.message || "Fatal server error during processing.",
       errorDetails: error.original?.message || error.sqlMessage || error.toString()
@@ -904,7 +841,9 @@ const uploadDocument = async (req, res) => {
 // invoice correctly re-evaluates Approved/Discrepancy/Pre-Approved).
 const updateInvoices = async (req, res) => {
   const transaction = await sequelize.transaction();
+  const writtenPaths = [];
   try {
+    const accessWhere = await getInvoiceAccessWhere(req.user);
     let invoicesPayload = req.body.invoices;
     if (typeof invoicesPayload === 'string') {
       try {
@@ -944,12 +883,18 @@ const updateInvoices = async (req, res) => {
       });
     }
 
+    assertDocumentRules(filesMap);
+
     const uploadsDir = path.join(__dirname, '../uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
     const updatedIds = [];
+    const workflowNotices = [];
+    // Locations the user may edit invoices of (User Master > Settings &
+    // Hierarchy Access).
+    const locationAccess = await getLocationAccess(req.user.UserID, transaction);
 
     for (let i = 0; i < invoiceRows.length; i++) {
       const row = invoiceRows[i];
@@ -958,9 +903,16 @@ const updateInvoices = async (req, res) => {
         throw new Error("Every row being edited must include its invoiceId.");
       }
 
-      const existingInvoice = await InvoiceHeader.findByPk(invoiceId, { transaction });
+      const existingInvoice = await InvoiceHeader.findOne({
+        where: accessWhere
+          ? { [Op.and]: [{ InvoiceID: invoiceId }, accessWhere] }
+          : { InvoiceID: invoiceId },
+        transaction,
+      });
       if (!existingInvoice) {
-        throw new Error(`Invoice #${invoiceId} was not found.`);
+        const error = new Error(`Invoice #${invoiceId} was not found or is outside your assigned approval location.`);
+        error.statusCode = 403;
+        throw error;
       }
 
       // New attachment uploads: a slot is only ever written if it doesn't
@@ -968,32 +920,55 @@ const updateInvoices = async (req, res) => {
       // never be replaced or cleared from this endpoint (the frontend only
       // ever targets an already-empty slot with a new file; this check is
       // just defense in depth against stale client state).
-      let newDoc1Path = null, newDoc2Path = null, newDoc3Path = null;
-      if (!existingInvoice.Doc1Path && filesMap[`doc1_${i}`]) {
-        newDoc1Path = writeUploadedInvoiceFile(filesMap[`doc1_${i}`], invoiceId, "doc1", uploadsDir);
-      }
-      if (!existingInvoice.Doc2Path && filesMap[`doc2_${i}`]) {
-        newDoc2Path = writeUploadedInvoiceFile(filesMap[`doc2_${i}`], invoiceId, "doc2", uploadsDir);
-      }
-      if (!existingInvoice.Doc3Path && filesMap[`doc3_${i}`]) {
-        newDoc3Path = writeUploadedInvoiceFile(filesMap[`doc3_${i}`], invoiceId, "doc3", uploadsDir);
-      }
+      const newFileFor = (slot, storedPath) => (!storedPath && filesMap[`${slot}_${i}`]) || null;
+      const newFiles = [
+        newFileFor("doc1", existingInvoice.Doc1Path),
+        newFileFor("doc2", existingInvoice.Doc2Path),
+        newFileFor("doc3", existingInvoice.Doc3Path),
+      ];
+      assertDocumentsTotal({
+        newFiles: newFiles.filter(Boolean),
+        existingPaths: [existingInvoice.Doc1Path, existingInvoice.Doc2Path, existingInvoice.Doc3Path],
+        invoiceNo: existingInvoice.InvoiceNumber,
+      });
+      const [newDoc1Path, newDoc2Path, newDoc3Path] = newFiles.map((file, slotIndex) => {
+        if (!file) return null;
+        const filePath = writeUploadedInvoiceFile(file, invoiceId, DOCUMENT_SLOTS[slotIndex], uploadsDir);
+        writtenPaths.push(filePath);
+        return filePath;
+      });
 
       const gstNumber = String(row.gstNo || "").trim().toUpperCase();
-      const CustomerName = String(row.customerName || existingInvoice.CustomerName || "").trim();
+      const CustomerName = String(
+        row.customerName === undefined ? existingInvoice.CustomerName || "" : row.customerName || ""
+      ).trim();
       const invoiceDateFormatted = normalizeOptionalDateForDb(row.invoiceDate) || existingInvoice.InvoiceDate;
       const lrDateFormatted = normalizeOptionalDateForDb(row.lrDate);
       const lrNo = String(row.lrNo || existingInvoice.LRNumber || "").trim();
+      const soNumber = row.soNumber !== undefined ? normalizeSoNumber(row.soNumber) : existingInvoice.SONumber;
       const inputVehicleType = row.vehicleTypeId || row.vehicleType || existingInvoice.VehicleTypeID || null;
-      const toStation = String(row.toStation || existingInvoice.ToStation || "").trim();
-      const actualWeight = row.actualWeight !== undefined ? parseFloat(row.actualWeight || 0) : parseFloat(existingInvoice.TotalWeight || 0);
+      const typeFields = readContractTypeFields(row, existingInvoice);
+      const storedCity = typeFields.contractType === CONTRACT_TYPES.FTL_INBOUND ? existingInvoice.FromStation : existingInvoice.ToStation;
+      const city = String(row.toStation || storedCity || "").trim();
+      const actualWeight = row.actualWeight === undefined
+        ? parseOptionalNumber(existingInvoice.TotalWeight, "Actual Weight")
+        : parseOptionalNumber(row.actualWeight, "Actual Weight");
       const freightCharge = row.freightCharge !== undefined ? parseFloat(row.freightCharge || 0) : parseFloat(existingInvoice.BasicFreight || 0);
       const detainCharge = row.detainCharge !== undefined ? parseFloat(row.detainCharge || 0) : parseFloat(existingInvoice.DetainCharges || 0);
       const extraCharge = row.extraCharge !== undefined ? parseFloat(row.extraCharge || 0) : parseFloat(existingInvoice.ExtraCharges || 0);
       const totalBilledAmount = row.total !== undefined ? parseFloat(row.total || 0) : parseFloat(existingInvoice.TotalInvoiceAmount || 0);
-      const userRemarks = String(row.remarks !== undefined ? row.remarks : "").trim();
+      assertMinimumFreightCharge(freightCharge, row.invoiceNo || existingInvoice.InvoiceNumber);
+      assertPartyForCharges(typeFields, CustomerName, detainCharge, extraCharge);
+      assertVehicleTypeProvided(typeFields, inputVehicleType, existingInvoice.InvoiceNumber);
+      const userRemarks = row.userRemarks !== undefined ? normalizeUserRemark(row.userRemarks) : existingInvoice.UserRemarks;
       const preApproval = String(row.preAppr !== undefined ? row.preAppr : (existingInvoice.IsPreApproved ? "Yes" : "No")).trim();
       const isPreApproved = preApproval.toLowerCase() === "yes" || preApproval === "1" || preApproval === true;
+      assertRequiredDocument(
+        typeFields,
+        isPreApproved,
+        [existingInvoice.Doc1Path, existingInvoice.Doc2Path, existingInvoice.Doc3Path, newDoc1Path, newDoc2Path, newDoc3Path],
+        existingInvoice.InvoiceNumber
+      );
 
       // Vendor/GST: only re-resolve if a GST number was actually provided
       // for this row; otherwise keep the invoice's existing vendor linkage.
@@ -1007,7 +982,9 @@ const updateInvoices = async (req, res) => {
         extractedPAN = resolved.extractedPAN;
       }
 
-      const { resolvedVehicleTypeId, hasVehicleTypeNotFound } = await resolveVehicleTypeFromInput(inputVehicleType, transaction);
+      const vehicleTypeResult = await resolveVehicleTypeFromInput(inputVehicleType, transaction);
+      const resolvedVehicleTypeId = vehicleTypeResult.resolvedVehicleTypeId;
+      const hasVehicleTypeNotFound = typeFields.isKgBased || typeFields.isAdHoc ? false : vehicleTypeResult.hasVehicleTypeNotFound;
 
       // Resolve the Plants row (for FromStation) - mirrors uploadDocument:
       // row.plantId here is a genuine Plants.PlantID (the Edit Invoice
@@ -1016,7 +993,7 @@ const updateInvoices = async (req, res) => {
       const plantCandidate = row.plantId || row.locationId || existingInvoice.PlantID;
       const resolvedPlant = await resolveValidPlant(plantCandidate, defaultPlant, transaction);
       const resolvedPlantId = resolvedPlant.PlantID;
-      const fromStation = resolvedPlant.LocationName || resolvedPlant.PlantName || existingInvoice.FromStation || "";
+      const plantStation = resolvedPlant.LocationName || resolvedPlant.PlantName || existingInvoice.FromStation || "";
 
       // Resolve the real hierarchy Location (PlantLocations): prefer an
       // explicit locationId on the request (matches Add Invoice's payload
@@ -1035,73 +1012,52 @@ const updateInvoices = async (req, res) => {
           resolvedLocationName = locationRecord.LocationName;
         }
       }
+      await assertCanEditInvoice({
+        user: req.user,
+        access: locationAccess,
+        invoice: existingInvoice,
+        newLocationId: resolvedLocationId,
+        newLocationName: resolvedLocationName,
+        transaction,
+      });
 
-      const rawAuditResult = await computeContractAudit({
+      const { fromStation, toStation } = getRouteStations(typeFields, city, plantStation);
+
+      const rawAuditResult = await runContractAudit({
+        typeFields,
+        city,
+        actualWeight,
+        freightCharge,
         vendorId: vendor.VendorID,
         extractedPAN,
-        toStation,
-        actualWeight,
         resolvedVehicleTypeId,
+        vehicleTypeId: resolvedVehicleTypeId,
         hasVehicleTypeNotFound,
-        freightCharge,
         contractId: row.contractId || null
       }, transaction);
 
-      const {
-        destination, targetContractId, calculatedExpectedFreight,
-        hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeMismatch
-      } = rawAuditResult;
-      let { finalAuditDecision, auditRemarks, variance } = applyPreApprovedOverride(isPreApproved, rawAuditResult);
+      const { targetContractId } = rawAuditResult;
+      const { finalAuditDecision, auditRemarks, variance } = applyPreApprovedOverride(isPreApproved, rawAuditResult);
+      const selectedApproverUserId = row.approverUserId
+        ? await resolveSelectedApprover(row.approverUserId, resolvedLocationId, existingInvoice.InvoiceNumber)
+        : existingInvoice.SelectedApproverUserID;
 
-      const hasExtraCharge = extraCharge > 0;
-      const hasDetainCharge = detainCharge > 0;
-
-      // Send email alert if discrepancies or extra charges are found and not
-      // pre-approved. Unlike the initial creation (which confirms to the
-      // submitting user), a resubmission on edit routes to the location's
-      // approval recipient, mirroring the same rule/recipient lookup
-      // uploadDocument used for its own submission.
-      let emailStatusLog = "";
-      if (!isPreApproved && (hasExtraCharge || hasDetainCharge || hasContractMatchFailure || hasDestinationMismatch || hasVehicleTypeNotFound || hasVehicleTypeMismatch || finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY)) {
-        const recipientEmail = await getRecipientEmailForLocation(resolvedLocationId, transaction);
-
-        if (finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY) {
-          await safeNotify({
-            type: NOTIFICATION_TYPE_DISCREPANCY_DETECTED,
-            message: `Discrepancy detected on invoice ${existingInvoice.InvoiceNumber}: ${auditRemarks}`,
-          }, transaction);
-        }
-
-        const mailSent = await sendAuditNotificationEmail({
-          invoiceNo: existingInvoice.InvoiceNumber, CustomerName, invoiceDate: invoiceDateFormatted, lrDate: lrDateFormatted,
-          vendorName: vendor.VendorName, vendorCode: vendor.VendorCode, gstNumber, lrNo, fromStation, toStation,
-          actualWeight, freightCharge, calculatedExpectedFreight, totalBilledAmount,
-          variance, finalAuditDecision, auditRemarks, extraCharge, detainCharge,
-          hasExtraCharge, hasDetainCharge, hasContractMatchFailure, hasDestinationMismatch, hasVehicleTypeNotFound, hasVehicleTypeMismatch
-        }, recipientEmail);
-
-        if (mailSent) {
-          emailStatusLog = ` | Mail Sent to: ${recipientEmail}`;
-          auditRemarks += emailStatusLog;
-
-          await safeNotify({
-            type: NOTIFICATION_TYPE_EMAIL_SENT,
-            message: `Audit notification email sent for invoice ${existingInvoice.InvoiceNumber} to ${recipientEmail}.`,
-          }, transaction);
-        }
+      if (finalAuditDecision === VERIFICATION_STATUS_DISCREPANCY) {
+        await safeNotify({
+          type: NOTIFICATION_TYPE_DISCREPANCY_DETECTED,
+          userIds: [req.user?.UserID],
+          message: `Discrepancy detected on invoice ${existingInvoice.InvoiceNumber}: ${auditRemarks}`,
+        }, transaction);
       }
 
-      const totalExpectedPrice = calculatedExpectedFreight + detainCharge + extraCharge;
-
-      const remarksToStore = userRemarks
-        ? (auditRemarks ? `${userRemarks} | Audit: ${auditRemarks}` : userRemarks)
-        : (auditRemarks || existingInvoice.Remarks);
+      const totalExpectedPrice = getTotalExpectedPrice(rawAuditResult, typeFields, detainCharge, extraCharge);
 
       await existingInvoice.update({
-        CustomerName,
+        CustomerName: CustomerName || null,
         InvoiceDate: invoiceDateFormatted,
         LRDate: lrDateFormatted,
         LRNumber: lrNo,
+        SONumber: soNumber,
         VendorID: vendor.VendorID,
         VendorGSTID: vendorGst.VendorGSTID,
         PlantID: resolvedPlantId,
@@ -1116,8 +1072,11 @@ const updateInvoices = async (req, res) => {
         TotalInvoiceAmount: totalBilledAmount,
         FromStation: fromStation,
         ToStation: toStation,
-        Remarks: remarksToStore,
+        Remarks: auditRemarks || existingInvoice.Remarks,
+        UserRemarks: userRemarks,
         IsPreApproved: isPreApproved,
+        SelectedApproverUserID: selectedApproverUserId,
+        ...buildTypeColumnValues(typeFields),
         // Only ever set when that slot was previously empty (see the
         // write-only-if-empty checks above) - an existing attachment is
         // never included here, so it can never be replaced or cleared.
@@ -1150,21 +1109,31 @@ const updateInvoices = async (req, res) => {
         }, { transaction });
       }
 
+      // An edit re-runs the audit, so the approval workflow starts over.
+      const workflow = await approvalWorkflowService.restartWorkflow({
+        invoiceId,
+        outcome: getRoutingOutcome(finalAuditDecision),
+        actorUserId: req.user.UserID,
+      }, transaction);
+      workflowNotices.push(...workflow.notices);
+
       updatedIds.push(invoiceId);
     }
 
     await transaction.commit();
+    const { failures } = await deliverNotices(workflowNotices);
     return res.status(200).json({
       success: true,
-      message: `${updatedIds.length} invoice(s) updated successfully.`,
+      message: withMailWarnings(`${updatedIds.length} invoice(s) updated and sent through the approval workflow.`, failures),
       updatedIds
     });
   } catch (error) {
     if (transaction && !transaction.finished) {
       try { await transaction.rollback(); } catch (e) { console.error("Rollback error", e); }
     }
+    removeWrittenFiles(writtenPaths);
     console.error("INVOICE UPDATE ERROR:", error.original || error);
-    return res.status(400).json({
+    return res.status(error.statusCode || 400).json({
       success: false,
       message: error.message || "Failed to update invoice(s).",
     });

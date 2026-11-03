@@ -2,11 +2,12 @@ const {
   AccessRequest,
   User,
   Plant,
+  PlantLocation,
   UserModulePermission,
   UserLocationPermission,
-  Notification,
 } = require("../models");
 const sequelize = require("../config/database");
+const notificationService = require("./notification.service");
 const { MODULE_KEYS, MODULE_LABELS } = require("../constants/modules");
 const {
   NOTIFICATION_TYPE_ACCESS_REQUESTED,
@@ -14,12 +15,17 @@ const {
   NOTIFICATION_TYPE_ACCESS_REQUEST_REJECTED,
 } = require("../constants/notificationTypes");
 
+const LOCATION_ACTION_FIELDS = { view: "CanView", add: "CanAdd", edit: "CanEdit" };
+
+// View unless the location request asked for Add or Edit.
+const normalizeLocationAction = (action) => (LOCATION_ACTION_FIELDS[action] ? action : "view");
+
 // Creates a request for either a module permission (View/Add/Edit on a
 // specific module) or a plant/location (task item 19: generalizes the
 // earlier location-only request flow to any module or permission a user
-// is missing). Also posts a Notification so the bell/sound fire for
-// admins (task item 20).
-const createAccessRequest = async (userId, { requestType, moduleKey, requestedAction, plantId }) => {
+// is missing). Also notifies every admin so the bell/sound fire for them
+// only (task item 20).
+const createAccessRequest = async (userId, { requestType, moduleKey, requestedAction, plantId, locationId }) => {
   const user = await User.findByPk(userId);
   if (!user) throw new Error("User not found.");
 
@@ -31,8 +37,13 @@ const createAccessRequest = async (userId, { requestType, moduleKey, requestedAc
       throw new Error("Invalid requested action.");
     }
   } else if (requestType === "LOCATION") {
-    const plant = await Plant.findByPk(plantId);
-    if (!plant) throw new Error("Plant not found.");
+    if (locationId !== undefined && locationId !== null && locationId !== "") {
+      const location = await PlantLocation.findOne({ where: { LocationID: locationId } });
+      if (!location) throw new Error("Active hierarchy location not found.");
+    } else {
+      const plant = await Plant.findByPk(plantId);
+      if (!plant) throw new Error("Plant not found.");
+    }
   } else {
     throw new Error('Invalid request type - expected "MODULE" or "LOCATION".');
   }
@@ -41,18 +52,19 @@ const createAccessRequest = async (userId, { requestType, moduleKey, requestedAc
     UserID: userId,
     RequestType: requestType,
     ModuleKey: requestType === "MODULE" ? moduleKey : null,
-    RequestedAction: requestType === "MODULE" ? requestedAction : null,
-    PlantID: requestType === "LOCATION" ? plantId : null,
+    RequestedAction: requestType === "MODULE" ? requestedAction : normalizeLocationAction(requestedAction),
+    PlantID: requestType === "LOCATION" && !locationId ? plantId : null,
+    LocationID: requestType === "LOCATION" && locationId ? locationId : null,
   });
 
   const description =
     requestType === "MODULE"
       ? `${requestedAction} access to ${MODULE_LABELS[moduleKey] || moduleKey}`
-      : `access to a plant/location`;
+      : `${normalizeLocationAction(requestedAction)} access to ${locationId ? "a hierarchy location" : "a plant"}`;
 
-  await Notification.create({
-    Type: NOTIFICATION_TYPE_ACCESS_REQUESTED,
-    Message: `${user.FullName || user.Email} requested ${description}.`,
+  await notificationService.notifyAdmins({
+    type: NOTIFICATION_TYPE_ACCESS_REQUESTED,
+    message: `${user.FullName || user.Email} requested ${description}.`,
   });
 
   return request;
@@ -64,6 +76,7 @@ const listPendingRequests = async () => {
     include: [
       { model: User, as: "user", attributes: ["UserID", "FullName", "Email"] },
       { model: Plant, as: "plant" },
+      { model: PlantLocation, as: "location" },
     ],
     order: [["RequestedAt", "DESC"]],
   });
@@ -100,19 +113,33 @@ const resolveAccessRequest = async (requestId, adminUserId, decision) => {
       permission[field] = true;
       await permission.save();
     } else {
-      await UserLocationPermission.findOrCreate({
-        where: { UserID: request.UserID, PlantID: request.PlantID },
-        defaults: { UserID: request.UserID, PlantID: request.PlantID, CanView: true },
+      const permissionTarget = request.LocationID
+        ? { LocationID: request.LocationID }
+        : { PlantID: request.PlantID };
+      const [permission] = await UserLocationPermission.findOrCreate({
+        where: { UserID: request.UserID, ...permissionTarget },
+        defaults: {
+          UserID: request.UserID,
+          ...permissionTarget,
+          CanView: true,
+        },
       });
+      // A location request may ask for Add / Edit of its invoices too.
+      const field = LOCATION_ACTION_FIELDS[normalizeLocationAction(request.RequestedAction)];
+      permission.CanView = true;
+      permission[field] = true;
+      await permission.save();
     }
   }
 
-  await Notification.create({
-    Type:
+  // Only the user who raised the request is told the outcome.
+  await notificationService.notify({
+    type:
       decision === "APPROVED"
         ? NOTIFICATION_TYPE_ACCESS_REQUEST_APPROVED
         : NOTIFICATION_TYPE_ACCESS_REQUEST_REJECTED,
-    Message: `${request.user?.FullName || request.user?.Email || "A user"}'s access request was ${decision.toLowerCase()}.`,
+    message: `Your access request was ${decision.toLowerCase()}.`,
+    userIds: [request.UserID],
   });
 
   return request;

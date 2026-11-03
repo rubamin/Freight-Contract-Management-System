@@ -1,9 +1,8 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
-// Which plants/locations a user is allowed to access (task item 4's
-// "Settings & Hierarchy permissions" and task item 5's Default
-// Plant/Location list). One row per (UserID, PlantID) pair.
+// A user may receive access to a legacy Plants record or directly to a
+// Settings & Hierarchy location.
 const UserLocationPermission = sequelize.define(
   "UserLocationPermission",
   {
@@ -18,7 +17,11 @@ const UserLocationPermission = sequelize.define(
     },
     PlantID: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
+    },
+    LocationID: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
     CanView: {
       type: DataTypes.BOOLEAN,

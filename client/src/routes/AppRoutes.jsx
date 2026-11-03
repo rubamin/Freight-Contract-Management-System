@@ -24,6 +24,7 @@ import PublicRoute from "./PublicRoute";
 import Login from "../pages/Auth/Login";
 import ForgotPassword from "../pages/Auth/ForgotPassword";
 import ResetPassword from "../pages/Auth/ResetPassword";
+import SetPassword from "../pages/Auth/SetPassword";
 
 // Dashboard
 import Dashboard from "../pages/Dashboard/Dashboard";
@@ -52,6 +53,10 @@ import EditContract from "../pages/Contracts/EditContract";
 import InvoiceList from "../pages/Invoices/InvoiceList";
 import AddInvoice from "../pages/Invoices/AddInvoice";
 import EditInvoice from "../pages/Invoices/EditInvoice";
+import MyApprovals from "../pages/Approvals/MyApprovals";
+import MasterApprovals from "../pages/MasterApprovals/MasterApprovals";
+import MasterApprovalSettings from "../pages/Setting/MasterApprovalSettings";
+import { MASTER_APPROVALS_PATH, MASTER_APPROVAL_SETTINGS_PATH } from "../constants/masterApproval";
 
 // Settings (Added AdminSetting import from pages folder)
 import AdminSettings from "../pages/Setting/AdminSettings";
@@ -139,6 +144,20 @@ const AppRoutes = () => {
               />
             </Route>
           </Route>
+
+          {/* First sign-in: the page checks the session itself */}
+          <Route element={<AuthLayout />}>
+            <Route
+              path="/set-password"
+              element={<SetPassword />}
+            />
+          </Route>
+
+          {/* Users are created by an Admin only */}
+          <Route
+            path="/register"
+            element={<Navigate to="/login" replace />}
+          />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
@@ -244,6 +263,24 @@ const AppRoutes = () => {
                 element={<EditInvoice />}
               />
 
+              {/* Invoices waiting for the logged-in user's approval */}
+              <Route
+                path="/approvals"
+                element={<MyApprovals />}
+              />
+
+              {/* Master Add / Edit requests held for approval */}
+              <Route
+                path={MASTER_APPROVALS_PATH}
+                element={<MasterApprovals />}
+              />
+
+              {/* Which master changes need approval, and by whom (Admin) */}
+              <Route
+                path={MASTER_APPROVAL_SETTINGS_PATH}
+                element={<MasterApprovalSettings />}
+              />
+
               {/* Admin Settings Route */}
               <Route
                 path="/admin/settings"
@@ -272,21 +309,6 @@ const AppRoutes = () => {
                 element={<UserSettings />}
               />
 
-              {/* Workflow */}
-              <Route
-                path="/workflows/approvals"
-                element={<ModuleList configKey="approvals" />}
-              />
-
-              <Route
-                path="/workflows/audits"
-                element={<ModuleList configKey="audits" />}
-              />
-
-              <Route
-                path="/workflows/emails"
-                element={<ModuleList configKey="emails" />}
-              />
             </Route>
           </Route>
 

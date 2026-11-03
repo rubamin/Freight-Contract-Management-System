@@ -8,6 +8,9 @@ const {
 } = require("../validations/vendor.validation");
 const authMiddleware = require("../middleware/authMiddleware");
 const upload = require("../middleware/uploadMiddelware"); // Import upload middleware supporting vendorExcel
+const { holdForApproval } = require("../middleware/masterApprovalMiddleware");
+const { MODULE_KEYS } = require("../constants/modules");
+const { MASTER_ACTIONS, MASTER_REQUEST_OPERATIONS } = require("../constants/masterApproval");
 
 router.use(authMiddleware);
 
@@ -21,6 +24,7 @@ router.use(authMiddleware);
 router.post(
   "/bulk-upload",
   upload.vendorExcel,
+  holdForApproval(MODULE_KEYS.VENDOR_MASTER, MASTER_ACTIONS.ADD, MASTER_REQUEST_OPERATIONS.BULK),
   vendorController.bulkUploadVendors
 );
 
@@ -28,6 +32,7 @@ router.post(
 router.post(
   "/",
   validateVendor,
+  holdForApproval(MODULE_KEYS.VENDOR_MASTER, MASTER_ACTIONS.ADD),
   vendorController.createVendor
 );
 
@@ -47,6 +52,7 @@ router.get(
 router.put(
   "/:id",
   validateVendor,
+  holdForApproval(MODULE_KEYS.VENDOR_MASTER, MASTER_ACTIONS.EDIT),
   vendorController.updateVendor
 );
 

@@ -580,14 +580,6 @@ REFERENCES [dbo].[Plants] ([PlantID])
 GO
 ALTER TABLE [dbo].[UserLocationPermission] CHECK CONSTRAINT [FK_UserLocationPermission_Plants]
 GO
-/* NOTE: [dbo].[RolePermissions] is referenced by the application's
-   Sequelize model (server/models/RolePermission.js) but no CREATE TABLE
-   statement for it was present in the original schema reference this
-   file was built from. If it already exists in your live database,
-   this is just a gap in the reference copy, not a missing table. If it
-   does not exist, create it from the model definition before relying
-   on role-permission features. */
-GO
 /****** Object:  Index [IX_ContractMasterVendor]    Script Date: 08/20/2026 2:55:41 PM ******/
 CREATE NONCLUSTERED INDEX [IX_ContractMasterVendor] ON [dbo].[ContractMaster]
 (

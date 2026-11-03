@@ -1,4 +1,20 @@
 import { WEIGHT_UNIT_OPTIONS, VEHICLE_TYPE_UNIT_OPTIONS, DEFAULT_WEIGHT_UNIT } from "./units";
+import { PARTY_TYPE_OPTIONS, DEFAULT_PARTY_TYPE } from "./partyTypes";
+import { REMARK_MAX_LENGTH, USER_REMARKS_LABEL, SYSTEM_REMARKS_LABEL } from "./remarks";
+
+// Remark fields shared by every master (see constants/remarks.js).
+//   multiline   - rendered as a full-width text area
+//   systemField - shown read-only on Edit only and never sent to the API
+const USER_REMARKS_FORM_FIELD = {
+  name: "UserRemarks",
+  label: USER_REMARKS_LABEL,
+  multiline: true,
+  maxLength: REMARK_MAX_LENGTH,
+};
+const SYSTEM_REMARKS_FORM_FIELD = { name: "Remarks", label: SYSTEM_REMARKS_LABEL, multiline: true, systemField: true };
+const REMARK_FORM_FIELDS = [USER_REMARKS_FORM_FIELD, SYSTEM_REMARKS_FORM_FIELD];
+const REMARK_COLUMNS = ["UserRemarks", "Remarks"];
+const REMARK_COLUMN_LABELS = { UserRemarks: USER_REMARKS_LABEL, Remarks: SYSTEM_REMARKS_LABEL };
 
 export const moduleConfigs = {
   destinations: {
@@ -12,15 +28,18 @@ export const moduleConfigs = {
     editPath: "/masters/destinations/edit",
     addButtonText: "Add Destination",
     softDeleteOnly: true,
+    allowHardDelete: true,
     // District/State are auto-filled server-side from City (task item 7) -
     // still shown as read-only columns in the list, but no longer editable
     // form fields or part of the bulk-upload template.
-    columns: ["City", "District", "State", "IsActive"],
-    bulkUploadFields: ["City"],
+    columns: ["City", "District", "State", "IsActive", ...REMARK_COLUMNS],
+    columnLabels: REMARK_COLUMN_LABELS,
+    bulkUploadFields: ["City", "UserRemarks"],
     formFields: [
       { name: "City", label: "City", required: true, autoFillsDistrictState: true },
       { name: "District", label: "District (auto-filled)", readOnly: true, autoFillDependent: true },
       { name: "State", label: "State (auto-filled)", readOnly: true, autoFillDependent: true },
+      ...REMARK_FORM_FIELDS,
     ],
     // A destination is considered a duplicate purely by City (District/
     // State are derived from it, not independently meaningful for this
@@ -41,8 +60,10 @@ export const moduleConfigs = {
     editPath: "/masters/vehicle-types/edit",
     addButtonText: "Add Vehicle Type",
     softDeleteOnly: true,
-    columns: ["VehicleName", "Capacity", "Unit", "IsActive"],
-    bulkUploadFields: ["VehicleName", "Capacity", "Unit"],
+    allowHardDelete: true,
+    columns: ["VehicleName", "Capacity", "Unit", "IsActive", ...REMARK_COLUMNS],
+    columnLabels: REMARK_COLUMN_LABELS,
+    bulkUploadFields: ["VehicleName", "Capacity", "Unit", "UserRemarks"],
     formFields: [
       { name: "VehicleName", label: "Vehicle Name", required: true },
       { name: "Capacity", label: "Capacity", type: "number" },
@@ -54,6 +75,7 @@ export const moduleConfigs = {
         options: VEHICLE_TYPE_UNIT_OPTIONS,
         defaultValue: DEFAULT_WEIGHT_UNIT,
       },
+      ...REMARK_FORM_FIELDS,
     ],
     // A vehicle type is considered a duplicate by name alone.
     duplicateCheckFields: ["VehicleName"],
@@ -72,10 +94,12 @@ export const moduleConfigs = {
     editPath: "/masters/weights/edit",
     addButtonText: "Add Weight",
     softDeleteOnly: true,
+    allowHardDelete: true,
     // Simplified to a single Weight value + Weight Unit dropdown (task
     // item 9) - no more From/To range.
-    columns: ["Weight", "WeightUnit", "IsActive"],
-    bulkUploadFields: ["Weight", "WeightUnit"],
+    columns: ["Weight", "WeightUnit", "IsActive", ...REMARK_COLUMNS],
+    columnLabels: REMARK_COLUMN_LABELS,
+    bulkUploadFields: ["Weight", "WeightUnit", "UserRemarks"],
     formFields: [
       { name: "Weight", label: "Weight", type: "number", required: true },
       {
@@ -85,6 +109,7 @@ export const moduleConfigs = {
         options: WEIGHT_UNIT_OPTIONS,
         defaultValue: DEFAULT_WEIGHT_UNIT,
       },
+      ...REMARK_FORM_FIELDS,
     ],
     // A weight is a duplicate only if both the value and its unit match
     // (5 MT and 5 KG are different slabs).
@@ -93,8 +118,10 @@ export const moduleConfigs = {
     multiRowEntry: true,
     maxRows: 10,
   },
+  // One master for both parties: PartyType decides whether a record is
+  // offered on outbound invoices (Customer) or inbound invoices (Supplier).
   customers: {
-    title: "Customer Master",
+    title: "Customer / Supplier Master",
     path: "/masters/customers",
     apiGroup: "masters",
     moduleName: "customers",
@@ -102,19 +129,33 @@ export const moduleConfigs = {
     idField: "CustomerID",
     addPath: "/masters/customers/add",
     editPath: "/masters/customers/edit",
-    addButtonText: "Add Customer",
+    addButtonText: "Add Customer / Supplier",
     softDeleteOnly: true,
-    columns: ["CustomerName", "ContactPerson", "Email", "Phone", "IsActive"],
-    bulkUploadFields: ["CustomerName", "ContactPerson", "Email", "Phone", "Address"],
+    allowHardDelete: true,
+    columns: ["CustomerName", "PartyType", "ContactPerson", "Email", "Phone", "IsActive", ...REMARK_COLUMNS],
+    columnLabels: { CustomerName: "Name", PartyType: "Type", ...REMARK_COLUMN_LABELS },
+    // PartyType accepts Customer / Supplier in the uploaded sheet.
+    bulkUploadFields: ["CustomerName", "PartyType", "ContactPerson", "Email", "Phone", "Address", "UserRemarks"],
     formFields: [
-      { name: "CustomerName", label: "Customer Name", required: true },
+      {
+        name: "PartyType",
+        label: "Customer / Supplier",
+        type: "select",
+        required: true,
+        options: PARTY_TYPE_OPTIONS,
+        defaultValue: DEFAULT_PARTY_TYPE,
+        // Offers "set all rows" on the multi-row Add page.
+        bulkApply: true,
+      },
+      { name: "CustomerName", label: "Customer / Supplier Name", required: true },
       { name: "ContactPerson", label: "Contact Person" },
       { name: "Email", label: "Email", type: "email" },
       { name: "Phone", label: "Phone" },
       { name: "Address", label: "Address" },
+      ...REMARK_FORM_FIELDS,
     ],
-    // A customer is considered a duplicate by name alone.
-    duplicateCheckFields: ["CustomerName"],
+    // The same name may exist once as a customer and once as a supplier.
+    duplicateCheckFields: ["CustomerName", "PartyType"],
     // Multi-row add support (task item 11).
     multiRowEntry: true,
     maxRows: 10,
@@ -171,9 +212,3 @@ export const moduleConfigs = {
     ],
   },
 };
-
-export const moduleNavigation = [
-  moduleConfigs.contracts,
-  moduleConfigs.invoices,
-  moduleConfigs.settings, // Added here to reflect in navigation/sidebar
-];

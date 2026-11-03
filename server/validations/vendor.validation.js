@@ -1,4 +1,5 @@
 const Joi = require("joi");
+const { REMARK_MAX_LENGTH } = require("../constants/remarks");
 
 /**
  * PAN Validation
@@ -88,6 +89,11 @@ const vendorSchema = Joi.object({
     }),
 
   IsActive: Joi.boolean().optional(),
+
+  UserRemarks: Joi.string()
+    .allow("", null)
+    .max(REMARK_MAX_LENGTH)
+    .optional(),
 
   gstNumbers: Joi.array()
     .items(gstSchema)

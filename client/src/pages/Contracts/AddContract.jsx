@@ -8,8 +8,10 @@ import {
   MenuItem,
   Paper,
   Select,
+  TextField,
   Typography,
   Divider,
+  Chip,
 } from "@mui/material";
 import { CloudUpload } from "@mui/icons-material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -24,6 +26,18 @@ import AppSnackbar from "../../components/common/AppSnackbar";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 import CustomTextField from "../../components/common/CustomTextField";
 import CustomButton from "../../components/common/CustomButton";
+import RateMatrixTemplateLink from "../../components/common/RateMatrixTemplateLink";
+import { UPLOAD_RULES, findUploadRuleViolation } from "../../constants/uploadRules";
+import UploadRequirementsHint from "../../components/common/UploadRequirementsHint";
+import ContractTypePicker from "../../components/common/ContractTypePicker";
+import { getRedirectDelay, getSaveSuccessMessage, isPendingApproval } from "../../utils/saveResult";
+import { DEFAULT_CONTRACT_TYPE, getContractTypeLabel } from "../../constants/contractTypes";
+import {
+  REMARK_MAX_LENGTH,
+  USER_REMARKS_LABEL,
+  SYSTEM_REMARKS_LABEL,
+  SYSTEM_REMARKS_HELPER,
+} from "../../constants/remarks";
 
 import {
   addContract,
@@ -36,12 +50,13 @@ import {
 const DISPLAY_DATE_FORMAT = "DD/MM/YYYY";
 
 const initialFormData = {
+  ContractType: "", // chosen first on the create page
   VendorID: "",
   VendorPAN: "",
-  ContractNumber: "",
+  ContactPerson: "",
   ValidFrom: "", // Stored as YYYY-MM-DD string for API
   ValidTo: "",   // Stored as YYYY-MM-DD string for API
-  Remarks: "",
+  UserRemarks: "",
   Status: "Draft",
 };
 
@@ -61,12 +76,13 @@ const parseDateForApi = (newValue) => {
 };
 
 const buildFormDataFromContract = (contract) => ({
+  ContractType: contract?.ContractType || DEFAULT_CONTRACT_TYPE,
   VendorID: contract?.VendorID || "",
   VendorPAN: contract?.VendorPAN || contract?.vendor?.PANNo || "",
-  ContractNumber: contract?.ContractNo || "",
+  ContactPerson: contract?.ContactPerson || contract?.vendor?.ContactPerson || "",
   ValidFrom: contract?.ContractStartDate ? String(contract.ContractStartDate).slice(0, 10) : "",
   ValidTo: contract?.ContractEndDate ? String(contract.ContractEndDate).slice(0, 10) : "",
-  Remarks: contract?.Remarks || "",
+  UserRemarks: contract?.UserRemarks || "",
   Status: contract?.Status || "Draft",
 });
 
@@ -74,10 +90,9 @@ const mapBackendErrors = (backendErrors = []) => {
   const nextErrors = {};
   backendErrors.forEach((message) => {
     if (message.includes("Vendor")) nextErrors.VendorID = message;
-    else if (message.includes("Contract Number") || message.includes("ContractNo")) nextErrors.ContractNumber = message;
     else if (message.includes("Valid From")) nextErrors.ValidFrom = message;
     else if (message.includes("Valid To")) nextErrors.ValidTo = message;
-    else if (message.includes("Excel")) nextErrors.RateMatrix = message;
+    else if (message.includes("Excel") || message.includes("Sheet") || message.includes("sheet")) nextErrors.RateMatrix = message;
   });
   return nextErrors;
 };
@@ -113,7 +128,6 @@ const AddContract = () => {
   const validateForm = () => {
     const nextErrors = {};
     if (!formData.VendorID) nextErrors.VendorID = "Vendor selection is required.";
-    if (!formData.ContractNumber.trim()) nextErrors.ContractNumber = "Contract Number is required.";
     if (!formData.ValidFrom) nextErrors.ValidFrom = "Validity From is required.";
     if (!formData.ValidTo) nextErrors.ValidTo = "Validity To is required.";
     if (formData.ValidFrom && formData.ValidTo && formData.ValidTo < formData.ValidFrom) {
@@ -146,31 +160,40 @@ const AddContract = () => {
       ...prev,
       VendorID: targetVendorId,
       VendorPAN: selectedVendorObj?.PANNo || selectedVendorObj?.PANNumber || selectedVendorObj?.VendorPAN || "",
+      ContactPerson: selectedVendorObj?.ContactPerson || selectedVendorObj?.VendorName || "",
     }));
     setErrors((prev) => ({ ...prev, VendorID: "" }));
   };
 
   const handleRateMatrixChange = (event) => {
     const file = event.target.files?.[0] || null;
-    const allowedExtensions = [".xls", ".xlsx"];
-    const extension = file?.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    const violation = findUploadRuleViolation(file, UPLOAD_RULES.CONTRACT_RATE_MATRIX);
 
-    if (file && !allowedExtensions.includes(extension)) {
+    if (violation) {
       setRateMatrix(null);
-      setErrors((prev) => ({ ...prev, RateMatrix: "Only XLS and XLSX files are allowed." }));
+      setErrors((prev) => ({ ...prev, RateMatrix: violation }));
       return;
     }
     setRateMatrix(file);
     setErrors((prev) => ({ ...prev, RateMatrix: "" }));
   };
 
+  // The type is chosen on the first step, so Reset keeps it.
   const handleReset = () => {
-    setFormData(initialFormData);
+    setFormData((prev) => ({ ...initialFormData, ContractType: prev.ContractType }));
     setRateMatrix(null);
     setErrors({});
   };
 
   const handleCancel = () => navigate("/contracts");
+
+  const handleContractTypeSelect = (contractType) => {
+    setFormData((prev) => ({ ...prev, ContractType: contractType }));
+    setRateMatrix(null);
+    setErrors({});
+  };
+
+  const isTypeStep = !id && !formData.ContractType;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -179,11 +202,7 @@ const AddContract = () => {
 
     const payload = new FormData();
     Object.keys(formData).forEach((key) => {
-      if (key === "ContractNumber") {
-        payload.append("ContractNo", formData[key]);
-      } else {
-        payload.append(key, formData[key]);
-      }
+      payload.append(key, formData[key]);
     });
 
     if (rateMatrix) {
@@ -197,10 +216,10 @@ const AddContract = () => {
     if (addContract.fulfilled.match(result) || editContract.fulfilled.match(result)) {
       setSnackbar({
         open: true,
-        severity: "success",
-        message: isEditMode ? "Contract updated successfully." : "Contract saved successfully.",
+        severity: isPendingApproval(result.payload) ? "info" : "success",
+        message: getSaveSuccessMessage(result.payload, isEditMode ? "Contract updated successfully." : "Contract saved successfully."),
       });
-      setTimeout(() => navigate("/contracts"), 1000);
+      setTimeout(() => navigate("/contracts"), getRedirectDelay(result.payload));
       return;
     }
 
@@ -227,10 +246,32 @@ const AddContract = () => {
             ]}
           />
 
+          {isTypeStep ? (
+            <Box sx={{ mt: 4 }}>
+              <ContractTypePicker
+                title="Which type of contract is this?"
+                subtitle="The Excel template and the invoice columns depend on the contract type."
+                onSelect={handleContractTypeSelect}
+              />
+              <Box sx={{ mt: 4, display: "flex", justifyContent: "flex-end" }}>
+                <Button variant="outlined" sx={{ px: 4 }} onClick={handleCancel}>
+                  Cancel
+                </Button>
+              </Box>
+            </Box>
+          ) : (
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }} noValidate>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: "text.primary" }}>
-              Contract Basic Parameters
-            </Typography>
+            <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: "text.primary" }}>
+                Contract Basic Parameters
+              </Typography>
+              <Chip color="primary" variant="outlined" label={getContractTypeLabel(formData.ContractType)} />
+              {!id && (
+                <Button size="small" sx={{ textTransform: "none" }} onClick={() => handleContractTypeSelect("")}>
+                  Change Type
+                </Button>
+              )}
+            </Box>
 
             <Box
               sx={{
@@ -277,16 +318,13 @@ const AddContract = () => {
                 }}
               />
 
-              {/* Contract Number Field */}
+              {/* Contact Person Field - filled from the selected vendor, editable */}
               <CustomTextField
-                required
-                label="Contract Number"
-                name="ContractNumber"
-                placeholder="Enter Contract Number"
-                value={formData.ContractNumber}
+                label="Contact Person"
+                name="ContactPerson"
+                placeholder="Enter Contact Person Name"
+                value={formData.ContactPerson}
                 onChange={handleChange}
-                error={Boolean(errors.ContractNumber)}
-                helperText={errors.ContractNumber}
                 slotProps={{
                   input: { readOnly: isReadOnly },
                   inputLabel: { shrink: true },
@@ -372,25 +410,42 @@ const AddContract = () => {
                   <Typography noWrap variant="body2">
                     {rateMatrix ? rateMatrix.name : contract?.RateMatrixFileName || "Upload Rate Matrix (Excel)"}
                   </Typography>
-                  <input hidden type="file" accept=".xls,.xlsx" onChange={handleRateMatrixChange} />
+                  <input hidden type="file" accept={UPLOAD_RULES.CONTRACT_RATE_MATRIX.accept} onChange={handleRateMatrixChange} />
                 </Button>
+                <UploadRequirementsHint rule={UPLOAD_RULES.CONTRACT_RATE_MATRIX} sx={{ mt: 0.5, mx: 1 }} />
                 {errors.RateMatrix && (
                   <FormHelperText error sx={{ mx: 1 }}>{errors.RateMatrix}</FormHelperText>
                 )}
+                <RateMatrixTemplateLink contractType={formData.ContractType} />
               </Box>
 
-              <CustomTextField
-                label="General Remarks"
-                name="Remarks"
-                placeholder="Enter additional description comments..."
-                value={formData.Remarks}
+              <TextField
+                fullWidth
+                label={USER_REMARKS_LABEL}
+                name="UserRemarks"
+                placeholder="Enter your remarks..."
+                value={formData.UserRemarks}
                 onChange={handleChange}
                 slotProps={{
                   input: { readOnly: isReadOnly },
                   inputLabel: { shrink: true },
+                  htmlInput: { maxLength: REMARK_MAX_LENGTH },
                 }}
               />
             </Box>
+
+            {/* System remarks exist once the contract is saved (view mode) */}
+            {isReadOnly && contract && (
+              <TextField
+                fullWidth
+                disabled
+                sx={{ mt: 3 }}
+                label={SYSTEM_REMARKS_LABEL}
+                value={contract.Remarks || "-"}
+                helperText={SYSTEM_REMARKS_HELPER}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            )}
 
             <Divider sx={{ my: 4 }} />
 
@@ -411,6 +466,7 @@ const AddContract = () => {
               )}
             </Box>
           </Box>
+          )}
         </Paper>
 
         {/* Snackbar Feedback Notification */}

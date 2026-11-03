@@ -4,6 +4,8 @@ const {
   Vendor,
   User,
   ContractRateMatrix,
+  ContractCharge,
+  ContractZoneRate,
   DestinationMaster,
   VehicleType,
   WeightMaster,
@@ -23,19 +25,23 @@ const contractInclude = [
       { model: VehicleType, as: "vehicleType" },
       { model: WeightMaster, as: "weight" }
     ]
-  }
+  },
+  { model: ContractCharge, as: "charges" },
+  { model: ContractZoneRate, as: "zoneRates" }
 ];
 
 const buildWhere = ({
   search = "",
   status = "",
   vendorId = "",
+  contractType = "",
 }) => {
   const where = {};
 
   if (search) {
     where[Op.or] = [
       { ContractNo: { [Op.like]: `%${search}%` } },
+      { ContactPerson: { [Op.like]: `%${search}%` } },
       { VendorPAN: { [Op.like]: `%${search}%` } },
       { Remarks: { [Op.like]: `%${search}%` } },
     ];
@@ -47,6 +53,10 @@ const buildWhere = ({
 
   if (vendorId) {
     where.VendorID = vendorId;
+  }
+
+  if (contractType) {
+    where.ContractType = String(contractType).toUpperCase();
   }
 
   return where;
@@ -91,9 +101,12 @@ const getContractByNumber = async (contractNo, vendorId, excludeContractId = nul
   return await ContractMaster.findOne({ where });
 };
 
-const getActiveContract = async ({ vendorId, excludeContractId = null }) => {
+// A vendor may hold one ACTIVE contract per contract type (e.g. Ekta has
+// both an FTL Outbound and a Part Load contract).
+const getActiveContract = async ({ vendorId, contractType, excludeContractId = null }) => {
   const where = {
     VendorID: vendorId,
+    ContractType: contractType,
     Status: "ACTIVE",
   };
 
@@ -110,6 +123,7 @@ const getAllContracts = async ({
   search = "",
   status = "",
   vendorId = "",
+  contractType = "",
   sortField = "ContractID",
   sortOrder = "DESC",
 }) => {
@@ -117,6 +131,8 @@ const getAllContracts = async ({
   const allowedSortFields = [
     "ContractID",
     "ContractNo",
+    "ContactPerson",
+    "ContractType",
     "VendorID",
     "ContractStartDate",
     "ContractEndDate",
@@ -132,7 +148,7 @@ const getAllContracts = async ({
   sortOrder = String(sortOrder).toUpperCase() === "ASC" ? "ASC" : "DESC";
 
   const { count, rows } = await ContractMaster.findAndCountAll({
-    where: buildWhere({ search, status, vendorId }),
+    where: buildWhere({ search, status, vendorId, contractType }),
     include: contractInclude,
     order: [[sortField, sortOrder]],
     offset,
@@ -233,6 +249,26 @@ const createRateMatrixEntry = async (matrixEntryData, transaction = null) => {
   return await ContractRateMatrix.create(matrixEntryData, { transaction });
 };
 
+// Charges and zone rates are always replaced together with the rate matrix
+// when a contract Excel is (re)uploaded.
+const replaceContractCharges = async (contractId, charges, transaction = null) => {
+  await ContractCharge.destroy({ where: { ContractID: contractId }, transaction });
+  if (!charges.length) return;
+  await ContractCharge.bulkCreate(
+    charges.map((charge) => ({ ...charge, ContractID: contractId })),
+    { transaction }
+  );
+};
+
+const replaceContractZoneRates = async (contractId, zoneRates, transaction = null) => {
+  await ContractZoneRate.destroy({ where: { ContractID: contractId }, transaction });
+  if (!zoneRates.length) return;
+  await ContractZoneRate.bulkCreate(
+    zoneRates.map((zoneRate) => ({ ...zoneRate, ContractID: contractId })),
+    { transaction }
+  );
+};
+
 // 5. Additional Contract Calculation Rules Handling Methods
 
 const getRateMatrixByContractId = async (contractId, transaction = null) => {
@@ -272,6 +308,8 @@ module.exports = {
   findOrCreateWeight,
   clearRateMatrixByContractId,
   createRateMatrixEntry,
+  replaceContractCharges,
+  replaceContractZoneRates,
 
   getRateMatrixByContractId,
   updateRateMatrixEntry,

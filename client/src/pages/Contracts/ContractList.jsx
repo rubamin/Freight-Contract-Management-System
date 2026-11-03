@@ -17,7 +17,6 @@ import {
 } from "@mui/material";
 import {
   Add,
-  Clear,
   Delete,
   Download,
   Edit,
@@ -29,6 +28,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import PageHeader from "../../components/common/PageHeader";
+import { getContractTypeLabel } from "../../constants/contractTypes";
 import DeleteDialog from "../../components/common/DeleteDialog";
 import LoadingOverlay from "../../components/common/LoadingOverlay";
 import AppSnackbar from "../../components/common/AppSnackbar";
@@ -120,6 +120,8 @@ const ContractList = () => {
       contracts.map((contract) => ({
         ...contract,
         VendorName: contract.vendor?.VendorName || "-",
+        ContractTypeLabel: getContractTypeLabel(contract.ContractType),
+        ContactPerson: contract.ContactPerson || contract.vendor?.ContactPerson || "-",
         ValidityFrom: formatDate(contract.ContractStartDate),
         ValidityTo: formatDate(contract.ContractEndDate),
         CreatedDate: formatDate(contract.CreatedAt),
@@ -240,14 +242,14 @@ const ContractList = () => {
   // Handle data export to Excel spreadsheet
   const handleExport = () => {
     const headers = [
-      "Contract Number", "Vendor Name", "PAN Number", "Validity From",
-      "Validity To", "Diesel Base Price", "Diesel Revision", "Status", "Created Date",
+      "Contract Type", "Contact Person", "Vendor Name", "PAN Number", "Validity From",
+      "Validity To", "Status", "Created Date",
     ];
 
     const lines = rows.map((row) =>
       [
-        row.ContractNo, row.VendorName, row.VendorPAN, row.ValidityFrom,
-        row.ValidityTo, row.DieselBasePrice, row.DieselRevision, row.Status, row.CreatedDate,
+        row.ContractTypeLabel, row.ContactPerson, row.VendorName, row.VendorPAN, row.ValidityFrom,
+        row.ValidityTo, row.Status, row.CreatedDate,
       ]
         .map(buildExportValue)
         .join(",")
@@ -266,13 +268,12 @@ const ContractList = () => {
 
   // DataGrid table columns configuration
   const columns = [
-    { field: "ContractNo", headerName: "Contract Number", width: 140 },
+    { field: "ContractTypeLabel", headerName: "Contract Type", width: 190, sortable: false },
+    { field: "ContactPerson", headerName: "Contact Person", width: 160 },
     { field: "VendorName", headerName: "Vendor Name", width: 160 },
     { field: "VendorPAN", headerName: "PAN Number", width: 120 },
     { field: "ValidityFrom", headerName: "Validity From", width: 120 },
     { field: "ValidityTo", headerName: "Validity To", width: 120 },
-    { field: "DieselBasePrice", headerName: "Diesel Base", width: 110 },
-    { field: "DieselRevision", headerName: "Diesel Rev.", width: 120 },
     {
       field: "Status",
       headerName: "Status",
@@ -378,7 +379,7 @@ const ContractList = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Search Contract, Vendor..."
+              placeholder="Search Contact Person, PAN..."
               value={search}
               onChange={(e) => {
                 queueMicrotask(() => {

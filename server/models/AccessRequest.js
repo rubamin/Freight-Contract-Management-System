@@ -40,6 +40,10 @@ const AccessRequest = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    LocationID: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     Status: {
       type: DataTypes.STRING(20),
       allowNull: false,

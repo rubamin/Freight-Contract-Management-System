@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 const { lookupDistrictForCity, DEFAULT_STATE } = require("../constants/gujaratCityLookup");
+const { REMARK_COLUMNS } = require("./remarkColumns");
 
 const DestinationMaster = sequelize.define(
   "DestinationMaster",
@@ -29,6 +30,7 @@ const DestinationMaster = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    ...REMARK_COLUMNS,
   },
   {
     tableName: "DestinationMaster",

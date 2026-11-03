@@ -1,5 +1,6 @@
 const { isAdminRole } = require("../constants/roles");
 const permissionService = require("../services/permission.service");
+const { isWorkflowMember } = require("../services/approvalWorkflow.service");
 
 // Restricts a route to the Admin role only. Assumes authMiddleware has
 // already run and populated req.user.RoleName.
@@ -39,4 +40,18 @@ const requireModulePermission = (moduleKey, action) => {
   };
 };
 
-module.exports = { requireAdmin, requireModulePermission };
+// Restricts a route to users assigned to any approval workflow step.
+// Admins always pass. Assumes authMiddleware has already run.
+const requireWorkflowApprover = async (req, res, next) => {
+  try {
+    if (isAdminRole(req.user?.RoleName) || await isWorkflowMember(req.user.UserID)) return next();
+    return res.status(403).json({
+      success: false,
+      message: "Invoices Approvals is only available to users assigned to an approval workflow.",
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { requireAdmin, requireModulePermission, requireWorkflowApprover };

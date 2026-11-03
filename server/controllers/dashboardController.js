@@ -4,7 +4,7 @@ const getSummary = async (req, res) => {
   try {
     const { from, to } = req.query;
 
-    const summary = await dashboardService.getDashboardSummary({ from, to });
+    const summary = await dashboardService.getDashboardSummary({ from, to, user: req.user });
 
     return res.status(200).json({
       success: true,

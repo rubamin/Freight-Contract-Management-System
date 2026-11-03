@@ -170,13 +170,15 @@ state.pageSize = action.payload.pageSize;
 
       // Create Vendor
       .addCase(addVendor.fulfilled, (state, action) => {
-        state.vendors.unshift(action.payload.data);
+        // A change held for approval returns no vendor yet.
+        if (action.payload?.data?.VendorID) state.vendors.unshift(action.payload.data);
       })
 
       // Update Vendor
       .addCase(editVendor.fulfilled, (state, action) => {
+        // A change held for approval returns no vendor yet.
         const index = state.vendors.findIndex(
-          (x) => x.VendorID === action.payload.data.VendorID
+          (x) => x.VendorID === action.payload?.data?.VendorID
         );
 
         if (index !== -1) {

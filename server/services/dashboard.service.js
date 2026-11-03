@@ -2,15 +2,15 @@ const { Op, fn, col, literal } = require("sequelize");
 const {
   InvoiceHeader,
   InvoiceVerification,
-  StatusMaster,
   Vendor,
   ContractMaster,
-  Customer, // Make sure Customer model is imported correctly
+  CustomerMaster,
 } = require("../models");
 const {
   VERIFICATION_STATUS_DISCREPANCY,
 } = require("../constants/invoiceStatus");
 const { CONTRACT_STATUS } = require("../constants/contractStatus");
+const { getInvoiceAccessWhere } = require("../utils/invoiceAccess");
 
 const VENDOR_DISTRIBUTION_LIMIT = 10;
 
@@ -22,19 +22,22 @@ const buildDateRangeWhere = (from, to) => {
   return { InvoiceDate: range };
 };
 
-const getSummaryTotals = async (dateWhere) => {
+const combineWhere = (dateWhere, accessWhere) =>
+  accessWhere ? { [Op.and]: [dateWhere, accessWhere] } : dateWhere;
+
+const getSummaryTotals = async (dateWhere, accessWhere) => {
   const rows = await InvoiceHeader.findAll({
     attributes: [
       [fn("COUNT", col("InvoiceID")), "totalInvoices"],
     ],
-    where: dateWhere,
+    where: combineWhere(dateWhere, accessWhere),
     raw: true,
   });
   return { totalInvoices: Number(rows[0]?.totalInvoices || 0) };
 };
 
 const getTotalVendorCount = async () => await Vendor.count();
-const getTotalCustomerCount = async () => Customer ? await Customer.count() : 0;
+const getTotalCustomerCount = async () => await CustomerMaster.count();
 
 const getActiveContractCount = async () => {
   return await ContractMaster.count({
@@ -42,7 +45,7 @@ const getActiveContractCount = async () => {
   });
 };
 
-const getDiscrepancyCount = async (dateWhere) => {
+const getDiscrepancyCount = async (dateWhere, accessWhere) => {
   return await InvoiceVerification.count({
     where: { VerificationStatus: VERIFICATION_STATUS_DISCREPANCY },
     include: [
@@ -50,7 +53,7 @@ const getDiscrepancyCount = async (dateWhere) => {
         model: InvoiceHeader,
         as: "invoice",
         attributes: [],
-        where: dateWhere,
+        where: combineWhere(dateWhere, accessWhere),
         required: true,
       },
     ],
@@ -58,13 +61,13 @@ const getDiscrepancyCount = async (dateWhere) => {
 };
 
 // 1. Month-wise Invoices Count
-const getMonthlyTrend = async (dateWhere) => {
+const getMonthlyTrend = async (dateWhere, accessWhere) => {
   const rows = await InvoiceHeader.findAll({
     attributes: [
       [fn("FORMAT", col("InvoiceDate"), "yyyy-MM"), "month"],
       [fn("COUNT", col("InvoiceID")), "count"],
     ],
-    where: dateWhere,
+    where: combineWhere(dateWhere, accessWhere),
     group: [literal("FORMAT([InvoiceDate], 'yyyy-MM')")],
     order: [[literal("FORMAT([InvoiceDate], 'yyyy-MM')"), "ASC"]],
     raw: true,
@@ -77,7 +80,7 @@ const getMonthlyTrend = async (dateWhere) => {
 };
 
 // 2. Month-wise Discrepancies Count
-const getMonthlyDiscrepancies = async (dateWhere) => {
+const getMonthlyDiscrepancies = async (dateWhere, accessWhere) => {
   const rows = await InvoiceVerification.findAll({
     attributes: [
       [fn("FORMAT", col("invoice.InvoiceDate"), "yyyy-MM"), "month"],
@@ -89,7 +92,7 @@ const getMonthlyDiscrepancies = async (dateWhere) => {
         model: InvoiceHeader,
         as: "invoice",
         attributes: [],
-        where: dateWhere,
+        where: combineWhere(dateWhere, accessWhere),
         required: true,
       },
     ],
@@ -106,9 +109,9 @@ const getMonthlyDiscrepancies = async (dateWhere) => {
 };
 
 // 3. Combined Total Invoices and Total Discrepancies
-const getCombinedTrend = async (dateWhere) => {
-  const invoices = await getMonthlyTrend(dateWhere);
-  const discrepancies = await getMonthlyDiscrepancies(dateWhere);
+const getCombinedTrend = async (dateWhere, accessWhere) => {
+  const invoices = await getMonthlyTrend(dateWhere, accessWhere);
+  const discrepancies = await getMonthlyDiscrepancies(dateWhere, accessWhere);
 
   const map = {};
   invoices.forEach(item => {
@@ -126,13 +129,13 @@ const getCombinedTrend = async (dateWhere) => {
 };
 
 // 4. Top Vendors by Invoice Count
-const getVendorDistribution = async (dateWhere) => {
+const getVendorDistribution = async (dateWhere, accessWhere) => {
   const rows = await InvoiceHeader.findAll({
     attributes: [
       [col("InvoiceHeader.VendorID"), "VendorID"],
       [fn("COUNT", col("InvoiceHeader.InvoiceID")), "count"],
     ],
-    where: dateWhere,
+    where: combineWhere(dateWhere, accessWhere),
     include: [
       {
         model: Vendor,
@@ -155,8 +158,9 @@ const getVendorDistribution = async (dateWhere) => {
     }));
 };
 
-const getDashboardSummary = async ({ from, to }) => {
+const getDashboardSummary = async ({ from, to, user }) => {
   const dateWhere = buildDateRangeWhere(from, to);
+  const accessWhere = await getInvoiceAccessWhere(user);
 
   const [
     { totalInvoices },
@@ -169,15 +173,15 @@ const getDashboardSummary = async ({ from, to }) => {
     combinedTrend,
     vendorDistribution,
   ] = await Promise.all([
-    getSummaryTotals(dateWhere),
+    getSummaryTotals(dateWhere, accessWhere),
     getTotalVendorCount(),
     getTotalCustomerCount(),
     getActiveContractCount(),
-    getDiscrepancyCount(dateWhere),
-    getMonthlyTrend(dateWhere),
-    getMonthlyDiscrepancies(dateWhere),
-    getCombinedTrend(dateWhere),
-    getVendorDistribution(dateWhere),
+    getDiscrepancyCount(dateWhere, accessWhere),
+    getMonthlyTrend(dateWhere, accessWhere),
+    getMonthlyDiscrepancies(dateWhere, accessWhere),
+    getCombinedTrend(dateWhere, accessWhere),
+    getVendorDistribution(dateWhere, accessWhere),
   ]);
 
   return {

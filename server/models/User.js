@@ -71,6 +71,19 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+
+    // 1 = must set their own password before anything else opens.
+    MustChangePassword: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
+    // Moves forward on every password change; older sessions are rejected.
+    PasswordChangedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: "Users",

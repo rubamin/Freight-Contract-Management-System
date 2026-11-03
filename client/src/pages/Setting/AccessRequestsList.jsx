@@ -65,7 +65,10 @@ const AccessRequestsList = () => {
     if (request.RequestType === "MODULE") {
       return `${request.RequestedAction?.toUpperCase()} access to ${MODULE_LABELS[request.ModuleKey] || request.ModuleKey}`;
     }
-    return `Access to plant: ${request.plant?.PlantName || request.plant?.PlantCode || request.PlantID}`;
+    const action = (request.RequestedAction || "view").toUpperCase();
+    return request.location?.LocationName
+      ? `${action} access to location: ${request.location.LocationName}`
+      : `${action} access to plant: ${request.plant?.PlantName || request.plant?.PlantCode || request.PlantID}`;
   };
 
   const columns = [
@@ -74,14 +77,14 @@ const AccessRequestsList = () => {
       headerName: "Requested By",
       flex: 1,
       minWidth: 180,
-      valueGetter: (params) => params.row.user?.FullName || params.row.user?.Email || "-",
+      valueGetter: (_value, row) => row?.user?.FullName || row?.user?.Email || "-",
     },
     {
       field: "request",
       headerName: "Requesting",
       flex: 1.5,
       minWidth: 240,
-      valueGetter: (params) => describeRequest(params.row),
+      valueGetter: (_value, row) => describeRequest(row),
     },
     {
       field: "RequestType",
@@ -93,7 +96,8 @@ const AccessRequestsList = () => {
       field: "RequestedAt",
       headerName: "Requested At",
       width: 180,
-      valueGetter: (params) => new Date(params.row.RequestedAt).toLocaleString(),
+      valueGetter: (_value, row) =>
+        row?.RequestedAt ? new Date(row.RequestedAt).toLocaleString() : "-",
     },
     {
       field: "Action",

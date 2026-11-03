@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+const { USER_REMARKS_COLUMN } = require("./remarkColumns");
 
 const ContractMaster = sequelize.define(
   "ContractMaster",
@@ -23,8 +24,21 @@ const ContractMaster = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    // FTL_OUTBOUND / FTL_INBOUND / PTL_OUTBOUND / PART_LOAD - see
+    // constants/contractTypes.js (added by migration_v11.sql).
+    ContractType: {
+      type: DataTypes.STRING(30),
+      allowNull: false,
+      defaultValue: "FTL_OUTBOUND",
+    },
     VendorPAN: {
       type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    // Auto-filled from the selected vendor's contact person and editable on
+    // the Add/Edit Contract form (see migration_v10.sql).
+    ContactPerson: {
+      type: DataTypes.STRING(200),
       allowNull: true,
     },
     ContractStartDate: {
@@ -47,10 +61,12 @@ const ContractMaster = sequelize.define(
       type: DataTypes.STRING(30), 
       allowNull: true,
     },
+    // System generated (created / updated by) - see constants/remarks.js.
     Remarks: {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    ...USER_REMARKS_COLUMN,
     RateMatrixFileName: {
       type: DataTypes.STRING(255),
       allowNull: true,

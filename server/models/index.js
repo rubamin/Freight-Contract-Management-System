@@ -5,7 +5,6 @@ const Vendor = require("./Vendor");
 const VendorGST = require("./VendorGST");
 const User = require("./User");
 const Role = require("./Role");
-const RolePermission = require("./RolePermission");
 const UserPreference = require("./UserPreference");
 const Notification = require("./Notification");
 const Plant = require("./Plant");
@@ -20,15 +19,20 @@ const AuditLog = require("./Auditlog");
 // Importing Cleaned Contract Subsystem Models
 const ContractMaster = require("./ContractMaster");
 const ContractRateMatrix = require("./ContractRateMatrix");
+const ContractCharge = require("./ContractCharge");
+const ContractZoneRate = require("./ContractZoneRate");
 
 // Importing Invoice Subsystem Models
 const InvoiceHeader = require("./InvoiceHeader");
 const InvoiceItem = require("./InvoiceItem");
 const InvoiceApprovalHistory = require("./InvoiceApprovalHistory");
 const InvoiceVerification = require("./InvoiceVerification"); // <-- Added InvoiceVerification
+const InvoiceDraft = require("./InvoiceDraft");
 const UserModulePermission = require("./UserModulePermission");
 const UserLocationPermission = require("./UserLocationPermission");
 const AccessRequest = require("./AccessRequest");
+const PasswordHistory = require("./PasswordHistory");
+const PasswordOtp = require("./PasswordOtp");
 
 
 // ==========================================
@@ -55,16 +59,6 @@ Role.hasMany(User, {
 User.belongsTo(Role, {
   foreignKey: "RoleID",
   as: "role",
-});
-
-RolePermission.belongsTo(Role, {
-  foreignKey: "RoleID",
-  as: "role",
-});
-
-Role.hasMany(RolePermission, {
-  foreignKey: "RoleID",
-  as: "rolePermissions",
 });
 
 // ==========================================
@@ -159,6 +153,27 @@ WeightMaster.hasMany(ContractRateMatrix, {
 ContractRateMatrix.belongsTo(WeightMaster, {
   foreignKey: "WeightID",
   as: "weight",
+});
+
+// Contract type charges and Part Load zone rates (migration_v11)
+ContractMaster.hasMany(ContractCharge, {
+  foreignKey: "ContractID",
+  as: "charges",
+});
+
+ContractCharge.belongsTo(ContractMaster, {
+  foreignKey: "ContractID",
+  as: "contract",
+});
+
+ContractMaster.hasMany(ContractZoneRate, {
+  foreignKey: "ContractID",
+  as: "zoneRates",
+});
+
+ContractZoneRate.belongsTo(ContractMaster, {
+  foreignKey: "ContractID",
+  as: "contract",
 });
 
 // ==========================================
@@ -285,6 +300,22 @@ InvoiceVerification.belongsTo(InvoiceHeader, {
   as: "invoice",
 });
 
+// Users behind an invoice's approval tracking columns (migration_v14).
+InvoiceHeader.belongsTo(User, {
+  foreignKey: "UploadedBy",
+  as: "uploader",
+});
+
+InvoiceHeader.belongsTo(User, {
+  foreignKey: "SelectedApproverUserID",
+  as: "selectedApprover",
+});
+
+InvoiceHeader.belongsTo(User, {
+  foreignKey: "FinalApprovedBy",
+  as: "finalApprover",
+});
+
 // ==========================================
 //  PER-USER MODULE & LOCATION PERMISSIONS
 // ==========================================
@@ -318,6 +349,21 @@ UserLocationPermission.belongsTo(Plant, {
   as: "plant",
 });
 
+UserLocationPermission.belongsTo(PlantLocation, {
+  foreignKey: "LocationID",
+  as: "location",
+});
+
+User.hasMany(Notification, {
+  foreignKey: "UserID",
+  as: "notifications",
+});
+
+Notification.belongsTo(User, {
+  foreignKey: "UserID",
+  as: "recipient",
+});
+
 // ==========================================
 //  GENERALIZED ACCESS REQUESTS
 // ==========================================
@@ -336,6 +382,11 @@ AccessRequest.belongsTo(Plant, {
   as: "plant",
 });
 
+AccessRequest.belongsTo(PlantLocation, {
+  foreignKey: "LocationID",
+  as: "location",
+});
+
 module.exports = {
   sequelize,
   AccessRequest,
@@ -346,7 +397,6 @@ module.exports = {
   VendorGST,
   User,
   Role,
-  RolePermission,
   UserPreference,
   Notification,
   Plant,
@@ -358,8 +408,13 @@ module.exports = {
   AuditLog,
   ContractMaster,
   ContractRateMatrix,
+  ContractCharge,
+  ContractZoneRate,
   InvoiceHeader,
   InvoiceItem,
   InvoiceApprovalHistory,
   InvoiceVerification, // <-- Added to exports
+  InvoiceDraft,
+  PasswordHistory,
+  PasswordOtp,
 };

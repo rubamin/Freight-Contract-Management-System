@@ -43,7 +43,7 @@ const updateLocationPermissions = async (req, res) => {
   try {
     const permissions = await permissionService.setUserLocationPermissions(
       req.params.userId,
-      req.body.plantIds
+      req.body.locations
     );
 
     return res.status(200).json({

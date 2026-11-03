@@ -1,6 +1,7 @@
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 const { formatDateForDisplay } = require("../utils/dateFormatter");
+const { CONTRACT_TYPE_LABELS, DEFAULT_CONTRACT_TYPE } = require("../constants/contractTypes");
 
 // Shared branding constants so the Excel and PDF exports (task item 6) stay
 // visually consistent with each other and with each other's field order.
@@ -16,11 +17,13 @@ const buildContractDocumentData = (contract) => {
     destination: row.destination?.City || "-",
     vehicleType: row.vehicleType?.VehicleName || "-",
     weight: row.weight ? `${row.weight.Weight ?? ""} ${row.weight.WeightUnit || ""}`.trim() : "-",
-    baseRate: row.BaseRate != null ? Number(row.BaseRate).toFixed(2) : "-",
+    // Up to 4 decimals so per-KG rates (e.g. 2.0430) are not rounded away.
+    baseRate: row.BaseRate != null ? String(Number(row.BaseRate)) : "-",
   }));
 
   return {
     contractNo: contract.ContractNo,
+    contractType: CONTRACT_TYPE_LABELS[contract.ContractType || DEFAULT_CONTRACT_TYPE],
     vendorName: contract.vendor?.VendorName || "-",
     vendorPAN: contract.VendorPAN || contract.vendor?.PANNo || "-",
     startDate: formatDateForDisplay(contract.ContractStartDate),
@@ -42,6 +45,7 @@ const buildContractExcel = async (contract) => {
 
   const detailRows = [
     ["Contract No.", data.contractNo],
+    ["Contract Type", data.contractType],
     ["Vendor Name", data.vendorName],
     ["Vendor PAN", data.vendorPAN],
     ["Start Date", data.startDate],
@@ -94,6 +98,7 @@ const buildContractPdf = (contract) => {
   doc.fillColor("#000000").fontSize(11);
   const detailRows = [
     ["Contract No.", data.contractNo],
+    ["Contract Type", data.contractType],
     ["Vendor Name", data.vendorName],
     ["Vendor PAN", data.vendorPAN],
     ["Start Date", data.startDate],
