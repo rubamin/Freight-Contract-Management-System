@@ -1,9 +1,10 @@
 import axios from "axios";
 import { clearStoredAuth, getStoredToken } from "../utils/storage";
 import { PASSWORD_CHANGE_REQUIRED } from "../constants/password";
+import { SERVER_ORIGIN } from "../constants/appConfig";
 
 const api = axios.create({
-    baseURL: "http://localhost:5003/api",
+    baseURL: `${SERVER_ORIGIN}/api`,
     timeout: 10000,
     headers: {
         "Content-Type": "application/json"

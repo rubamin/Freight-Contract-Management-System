@@ -30,6 +30,7 @@ import { getSlabLabel, isAdditionalRateRow, isDomesticRateRow } from "../../util
 import ContractTypeRates from "../../components/contract/ContractTypeRates";
 import { CONTRACT_TYPES, DEFAULT_CONTRACT_TYPE, getContractTypeLabel } from "../../constants/contractTypes";
 import { USER_REMARKS_LABEL, SYSTEM_REMARKS_LABEL } from "../../constants/remarks";
+import { SERVER_ORIGIN } from "../../constants/appConfig";
 
 const statusColors = {
   DRAFT: "default",
@@ -74,7 +75,7 @@ const ViewContract = () => {
           }
         }
 
-        const response = await axios.get(`http://localhost:5003/api/contracts/${id}`, {
+        const response = await axios.get(`${SERVER_ORIGIN}/api/contracts/${id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

@@ -54,6 +54,7 @@ import InvoiceDraftsPanel from "../../components/invoiceForm/InvoiceDraftsPanel"
 import DeleteDialog from "../../components/common/DeleteDialog";
 import useInvoiceDrafts from "../../hooks/useInvoiceDrafts";
 import { DRAFT_PAGE_PATHS, DRAFT_TYPES } from "../../constants/invoiceDrafts";
+import { SERVER_ORIGIN } from "../../constants/appConfig";
 
 // Modal styling for audit remarks/logs popup
 const remarksModalStyle = {
@@ -167,7 +168,7 @@ const InvoiceList = () => {
     try {
       setLoading(true);
       const headers = getAuthHeader();
-      const response = await axios.get("http://localhost:5003/api/invoices", {
+      const response = await axios.get(`${SERVER_ORIGIN}/api/invoices`, {
         headers,
         params: buildListParams(search, filters),
       });
@@ -195,7 +196,7 @@ const InvoiceList = () => {
   useEffect(() => {
     const fetchLocations = async () => {
       try {
-        const response = await axios.get("http://localhost:5003/api/settings/metadata", { headers: getAuthHeader() });
+        const response = await axios.get(`${SERVER_ORIGIN}/api/settings/metadata`, { headers: getAuthHeader() });
         const metadata = response.data?.data || response.data || {};
         const plantNames = new Map((metadata.plants || []).map((plant) => [Number(plant.PlantHierarchyID), plant.PlantName]));
         const options = (metadata.locations || []).map((location) => ({
@@ -275,7 +276,7 @@ const InvoiceList = () => {
       const headers = getAuthHeader();
 
       const response = await axios.post(
-        "http://localhost:5003/api/invoices/send-mail",
+        `${SERVER_ORIGIN}/api/invoices/send-mail`,
         { invoiceIds: selectedRowIds },
         { headers }
       );
@@ -405,7 +406,7 @@ const InvoiceList = () => {
   const renderDocCell = (docPath) => {
     if (!docPath) return "-";
     const fileName = docPath.split("\\").pop().split("/").pop();
-    const fileUrl = `http://localhost:5003/${docPath.replace(/\\/g, "/")}`;
+    const fileUrl = `${SERVER_ORIGIN}/${docPath.replace(/\\/g, "/")}`;
 
     return (
       <Link

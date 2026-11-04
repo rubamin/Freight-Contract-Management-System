@@ -38,6 +38,7 @@ import EmptyState from "../../components/common/EmptyState";
 import FilterPanel from "../../components/common/FilterPanel";
 import CustomDataGrid from "../../components/common/CustomDataGrid";
 import BulkUploadModal from "../../components/common/BulkUploadModal";
+import { SERVER_ORIGIN } from "../../constants/appConfig";
 
 const VendorList = () => {
   const dispatch = useDispatch();
@@ -178,7 +179,7 @@ const VendorList = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await axios.post("http://localhost:5003/api/vendors/bulk-upload", formData, {
+      const response = await axios.post(`${SERVER_ORIGIN}/api/vendors/bulk-upload`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
