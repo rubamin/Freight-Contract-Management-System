@@ -70,7 +70,7 @@ const parseVehicleSlabHeader = (text) => {
   return slabColumn(to === null ? `${from} MT` : `${from}-${to} MT`);
 };
 
-// "UP TO 1000 KG" / "ABOVE 1000 KG" / "1001-5000 KG" -> column, or null.
+// "UP TO 1000 KG" / "ABOVE 1000 KG" / "1001-5003 KG" -> column, or null.
 const parseKgBandHeader = (text) => {
   const header = normalizeHeader(text);
   let match = header.match(UP_TO_KG_PATTERN);

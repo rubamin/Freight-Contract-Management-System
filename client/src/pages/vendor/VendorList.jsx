@@ -178,7 +178,7 @@ const VendorList = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await axios.post("http://localhost:5000/api/vendors/bulk-upload", formData, {
+      const response = await axios.post("http://localhost:5003/api/vendors/bulk-upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
           ...(token ? { Authorization: `Bearer ${token}` } : {})

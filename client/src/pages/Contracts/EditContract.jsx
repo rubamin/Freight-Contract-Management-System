@@ -984,7 +984,7 @@ const EditContract = () => {
                     type="number"
                     value={newFreight}
                     onChange={(e) => setNewFreight(e.target.value)}
-                    placeholder="e.g. 25000"
+                    placeholder="e.g. 25003"
                   />
                 </>
               )}

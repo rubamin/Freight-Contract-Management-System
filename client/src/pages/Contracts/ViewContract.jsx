@@ -74,7 +74,7 @@ const ViewContract = () => {
           }
         }
 
-        const response = await axios.get(`http://localhost:5000/api/contracts/${id}`, {
+        const response = await axios.get(`http://localhost:5003/api/contracts/${id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -474,4 +474,4 @@ const ViewContract = () => {
   );
 };
 
-export default ViewContract;
+export default ViewContract;

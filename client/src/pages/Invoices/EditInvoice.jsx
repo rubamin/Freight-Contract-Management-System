@@ -253,7 +253,7 @@ export default function EditInvoice() {
 
                 // Master reference data — same source AddInvoice.jsx uses.
                 try {
-                    const suggestionRes = await fetch('http://localhost:5000/api/invoices/invoice-suggestions', { method: 'GET', headers });
+                    const suggestionRes = await fetch('http://localhost:5003/api/invoices/invoice-suggestions', { method: 'GET', headers });
                     if (suggestionRes.ok && isMounted) {
                         const sJson = await suggestionRes.json();
                         const sData = sJson.data || {};
@@ -273,7 +273,7 @@ export default function EditInvoice() {
                 // old hardcoded VEHICLE_TYPES list so both pages stay in sync with
                 // the actual master data.
                 try {
-                    const vehicleTypesRes = await fetch('http://localhost:5000/api/masters/vehicle-types?pageSize=1000', { headers });
+                    const vehicleTypesRes = await fetch('http://localhost:5003/api/masters/vehicle-types?pageSize=1000', { headers });
                     if (isMounted) {
                         const vehicleTypesJson = vehicleTypesRes.ok ? await vehicleTypesRes.json() : { data: [] };
                         setMasterReferences(prev => ({
@@ -292,7 +292,7 @@ export default function EditInvoice() {
                 // dropdown lists real location codes (N1, N2, R1H4, ...).
                 try {
                     // Only the locations this user may edit invoices of.
-                    const metaRes = await fetch('http://localhost:5000/api/settings/metadata?access=edit', { method: 'GET', headers });
+                    const metaRes = await fetch('http://localhost:5003/api/settings/metadata?access=edit', { method: 'GET', headers });
                     if (isMounted) {
                         const metaJson = metaRes.ok ? await metaRes.json() : {};
                         const metaData = metaJson.data || metaJson || {};
@@ -307,7 +307,7 @@ export default function EditInvoice() {
    // Fetch each selected invoice's full record in parallel.
                 const results = await Promise.all(
                     idsToLoad.map(async (id) => {
-                        const res = await fetch(`http://localhost:5000/api/invoices/invoices/${id}`, { method: 'GET', headers });
+                        const res = await fetch(`http://localhost:5003/api/invoices/invoices/${id}`, { method: 'GET', headers });
                         if (!res.ok) return null;
                         const json = await res.json();
                         return json.data || null;
@@ -426,7 +426,7 @@ export default function EditInvoice() {
     const renderDocCell = (docPath) => {
         if (!docPath) return <Typography variant="caption" sx={{ color: '#9ca3af' }}>No file</Typography>;
         const fileName = docPath.split('\\').pop().split('/').pop();
-        const fileUrl = `http://localhost:5000/${docPath.replace(/\\/g, '/')}`;
+        const fileUrl = `http://localhost:5003/${docPath.replace(/\\/g, '/')}`;
         return (
             <Box
                 component="a"
@@ -629,7 +629,7 @@ export default function EditInvoice() {
                 });
             });
 
-            const response = await fetch('http://localhost:5000/api/invoices/documents/update', {
+            const response = await fetch('http://localhost:5003/api/invoices/documents/update', {
                 method: 'PUT',
                 headers: getAuthHeaders({ json: false }),
                 body: formData

@@ -35,7 +35,7 @@ Copy `server/.env.example` to `server/.env` and fill in the values.
 | Variable | Purpose |
 |---|---|
 | `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | SQL Server connection |
-| `PORT` | API port, for example `5000` |
+| `PORT` | API port, for example `5003` |
 | `JWT_SECRET`, `JWT_EXPIRES_IN` | Signing secret and lifetime (for example `1d`) of sign-in tokens |
 | `APP_URL` | Address people open the app at, used for links in emails. Use the server's LAN IP or domain, not `localhost`. `CLIENT_URL` is read if this is blank. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Mail server. Gmail: `smtp.gmail.com`, `587`, `false` |
@@ -43,7 +43,7 @@ Copy `server/.env.example` to `server/.env` and fill in the values.
 | `SMTP_FROM` | Sender address. Defaults to `SMTP_USER`. |
 | `MAIL_DEV_LOG` | `true` prints emails to the server log instead of sending them. Local testing only. |
 
-The client calls the API at `http://localhost:5000/api`. Change `baseURL` in
+The client calls the API at `http://localhost:5003/api`. Change `baseURL` in
 `client/src/config/axios.js` if the server runs elsewhere.
 
 ## 3. Update the database

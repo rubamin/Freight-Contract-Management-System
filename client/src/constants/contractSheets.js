@@ -132,7 +132,7 @@ export const SHEET_CONFIGS_BY_TYPE = {
       endColumns: [],
       canAddRows: true,
       addRowLabel: "Add Zone",
-      addColumn: { label: "Add Weight Band", placeholder: "e.g. UP TO 1000 KG, 1001-5000 KG, ABOVE 5000 KG", kind: "kgBand" },
+      addColumn: { label: "Add Weight Band", placeholder: "e.g. UP TO 1000 KG, 1001-5003 KG, ABOVE 5003 KG", kind: "kgBand" },
     },
     {
       id: SHEET_IDS.ODA_MATRIX,

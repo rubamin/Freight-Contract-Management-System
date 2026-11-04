@@ -18,8 +18,7 @@
    diffing against this copy to confirm nothing has drifted.
    ===================================================================== */
 
-USE [FreightContractDB]
-GO
+
 /****** Object:  Table [dbo].[ApprovalConfig]    Script Date: 08/20/2026 2:55:41 PM ******/
 SET ANSI_NULLS ON
 GO

@@ -167,7 +167,7 @@ const InvoiceList = () => {
     try {
       setLoading(true);
       const headers = getAuthHeader();
-      const response = await axios.get("http://localhost:5000/api/invoices", {
+      const response = await axios.get("http://localhost:5003/api/invoices", {
         headers,
         params: buildListParams(search, filters),
       });
@@ -195,7 +195,7 @@ const InvoiceList = () => {
   useEffect(() => {
     const fetchLocations = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/settings/metadata", { headers: getAuthHeader() });
+        const response = await axios.get("http://localhost:5003/api/settings/metadata", { headers: getAuthHeader() });
         const metadata = response.data?.data || response.data || {};
         const plantNames = new Map((metadata.plants || []).map((plant) => [Number(plant.PlantHierarchyID), plant.PlantName]));
         const options = (metadata.locations || []).map((location) => ({
@@ -275,7 +275,7 @@ const InvoiceList = () => {
       const headers = getAuthHeader();
 
       const response = await axios.post(
-        "http://localhost:5000/api/invoices/send-mail",
+        "http://localhost:5003/api/invoices/send-mail",
         { invoiceIds: selectedRowIds },
         { headers }
       );
@@ -405,7 +405,7 @@ const InvoiceList = () => {
   const renderDocCell = (docPath) => {
     if (!docPath) return "-";
     const fileName = docPath.split("\\").pop().split("/").pop();
-    const fileUrl = `http://localhost:5000/${docPath.replace(/\\/g, "/")}`;
+    const fileUrl = `http://localhost:5003/${docPath.replace(/\\/g, "/")}`;
 
     return (
       <Link

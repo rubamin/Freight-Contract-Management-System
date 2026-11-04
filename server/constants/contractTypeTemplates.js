@@ -44,7 +44,7 @@ const TYPE_TEMPLATE_HEADERS = {
 };
 
 // Weight band headers of the ZONE RATES sheet: "UP TO 1000 KG",
-// "ABOVE 1000 KG" or "1001-5000 KG".
+// "ABOVE 1000 KG" or "1001-5003 KG".
 const UP_TO_KG_PATTERN = /^UP\s*TO\s*(\d+(?:\.\d+)?)\s*KGS?$/;
 const ABOVE_KG_PATTERN = /^ABOVE\s*(\d+(?:\.\d+)?)\s*KGS?$/;
 const RANGE_KG_PATTERN = /^(\d+(?:\.\d+)?)\s*(?:-|TO)\s*(\d+(?:\.\d+)?)\s*KGS?$/;
