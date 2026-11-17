@@ -6,6 +6,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import * as authService from "../../services/authService";
 import { logout, sessionUpdated } from "../../redux/slices/authSlice";
 import { apiErrorMessage } from "../../utils/passwordRules";
+import { PASSWORD_EXPIRY_DAYS } from "../../constants/password";
 
 // Import reusable components
 import CustomButton from "../../components/common/CustomButton";
@@ -13,10 +14,11 @@ import PasswordField from "../../components/auth/PasswordField";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 
 const MISMATCH_MESSAGE = "The new password and the repeated password do not match.";
-const SESSION_EXPIRED_NOTICE = "Your time to set a password ran out. Please sign in again with the password from the email.";
+const SESSION_EXPIRED_NOTICE = "Your time to set a password ran out. Please sign in again.";
 
-// First sign-in (new account or after an admin reset): the user must
-// choose their own password before anything else opens.
+// First sign-in (new account or after an admin reset), or a password
+// older than PASSWORD_EXPIRY_DAYS: the user must choose a new password
+// before anything else opens.
 const SetPassword = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -69,8 +71,9 @@ const SetPassword = () => {
       </Typography>
 
       <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", mb: 3 }}>
-        Welcome{user?.FullName ? `, ${user.FullName}` : ""}. Before you continue, replace the temporary
-        password from the email with one of your own.
+        {user?.PasswordExpired
+          ? `Your password is more than ${PASSWORD_EXPIRY_DAYS} days old and has expired. Choose a new one to continue.`
+          : `Welcome${user?.FullName ? `, ${user.FullName}` : ""}. Before you continue, replace the temporary password from the email with one of your own.`}
       </Typography>
 
       {error && (

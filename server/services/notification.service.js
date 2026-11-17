@@ -40,13 +40,17 @@ const notify = async ({ type, message, relatedInvoiceId = null, userIds = [] }, 
   return created;
 };
 
-const getActiveAdminUserIds = async (transaction) => {
-  const admins = await User.findAll({
+// Every active admin (UserID, FullName, Email).
+const getActiveAdmins = (transaction) =>
+  User.findAll({
     where: { IsActive: true },
     include: [{ model: Role, as: "role", where: { RoleName: ADMIN_ROLE_NAME }, attributes: [] }],
-    attributes: ["UserID"],
+    attributes: ["UserID", "FullName", "Email"],
     transaction,
   });
+
+const getActiveAdminUserIds = async (transaction) => {
+  const admins = await getActiveAdmins(transaction);
   return admins.map(({ UserID }) => UserID);
 };
 
@@ -86,6 +90,7 @@ const clearNotifications = async ({ user }) => {
 module.exports = {
   notify,
   notifyAdmins,
+  getActiveAdmins,
   getNotificationsForUser,
   deleteNotification,
   clearNotifications,

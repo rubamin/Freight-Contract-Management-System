@@ -1,10 +1,11 @@
 // Sign-in sessions. A token carries a version (`ver`, older tokens are
 // rejected once) and the user's PasswordChangedAt (`pwdAt`), so a
 // password change or an admin reset ends every older session. A user who
-// must set a new password first gets a limited, short-lived token that
+// must set a new password first (temporary or expired password) gets a limited, short-lived token that
 // only opens the password routes (see middleware/authMiddleware.js).
 const { generateToken } = require("../helpers/jwt");
 const { sanitizeUser } = require("../utils/userSanitizer");
+const { needsPasswordChange } = require("../helpers/password");
 const {
   SESSION_TOKEN_VERSION,
   PASSWORD_CHANGE_TOKEN_SCOPE,
@@ -21,7 +22,7 @@ const issueSessionToken = (user) => {
     ver: SESSION_TOKEN_VERSION,
     pwdAt: passwordStamp(user.PasswordChangedAt),
   };
-  return user.MustChangePassword
+  return needsPasswordChange(user)
     ? generateToken({ ...payload, scope: PASSWORD_CHANGE_TOKEN_SCOPE }, PASSWORD_CHANGE_TOKEN_EXPIRY)
     : generateToken(payload);
 };

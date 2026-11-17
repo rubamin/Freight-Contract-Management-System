@@ -1,6 +1,7 @@
 const { verifyToken } = require("../helpers/jwt");
 const { User, Role } = require("../models");
 const { passwordStamp } = require("../services/session.service");
+const { needsPasswordChange } = require("../helpers/password");
 const {
   SESSION_TOKEN_VERSION,
   PASSWORD_CHANGE_TOKEN_SCOPE,
@@ -51,7 +52,7 @@ const loadSession = async (req, res) => {
     return fail(res, 401, "Your password was changed. Please sign in again.", AUTH_ERROR_CODES.SESSION_ENDED);
   }
 
-  return { user, passwordChangeRequired: isPasswordChangeToken || Boolean(user.MustChangePassword) };
+  return { user, passwordChangeRequired: isPasswordChangeToken || needsPasswordChange(user) };
 };
 
 // `allowPasswordChange` lets in a user who must set a new password first

@@ -31,6 +31,7 @@ export const NOTIFICATION_TITLES = {
   MASTER_APPROVAL_REQUIRED: "Master change waiting for your approval",
   MASTER_REQUEST_APPROVED: "Master change approved",
   MASTER_REQUEST_REJECTED: "Master change rejected",
+  ACCOUNT_LOCKED: "User account locked",
 };
 
 export const getNotificationTitle = (type) =>

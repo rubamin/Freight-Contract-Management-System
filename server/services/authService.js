@@ -7,7 +7,9 @@ const { recordAuthEvent } = require("./authAudit.service");
 const { assertNewPasswordAllowed, replacePassword } = require("./password.service");
 const { canIssueOtp, issueOtp, checkOtp, markOtpUsed } = require("./otp.service");
 const { sendPasswordOtpEmail, sendPasswordChangedEmail } = require("./authMail.service");
-const { AUTH_AUDIT_ACTIONS } = require("../constants/password");
+const { recordFailedLogin, lockMinutesLeft, alertAccountLockedInBackground } = require("./loginLockout.service");
+const { isPasswordExpired, needsPasswordChange } = require("../helpers/password");
+const { AUTH_AUDIT_ACTIONS, MAX_FAILED_LOGINS, LOCKOUT_MINUTES } = require("../constants/password");
 const { PASSWORD_RESET_INVALID_CODE_MESSAGE } = require("../constants/messages");
 
 const WITH_ROLE = [{ model: Role, as: "role" }];
@@ -37,29 +39,56 @@ const saveOwnPassword = async (user, newPassword, { ip, actionType, extraWork })
   return user;
 };
 
-// A user who must set a new password first gets the limited 30-minute
-// token (user.MustChangePassword = true).
+const LOCKED_STATUS = 423;
+const INVALID_LOGIN_MESSAGE = "Invalid email or password.";
+
+const lockedMessage = (minutes) =>
+  `Your account is locked after ${MAX_FAILED_LOGINS} wrong passwords. ` +
+  `Try again in ${minutes} minute${minutes === 1 ? "" : "s"}, or contact the IT department to reset your password straight away.`;
+
+const failedLoginMessage = (attemptsLeft) =>
+  attemptsLeft === 1
+    ? `${INVALID_LOGIN_MESSAGE} One more wrong password will lock your account for ${LOCKOUT_MINUTES} minutes.`
+    : INVALID_LOGIN_MESSAGE;
+
+// Counts the wrong password and throws the reply. The attempt that locks
+// the account alerts the admins in the background.
+const rejectWrongPassword = async (user, { ip }) => {
+  await recordAuthEvent({ ip, actorId: user.UserID, userId: user.UserID, actionType: AUTH_AUDIT_ACTIONS.LOGIN_FAILED });
+  const { locked, attemptsLeft, lockedUntilText } = await recordFailedLogin(user.UserID);
+  if (locked) {
+    alertAccountLockedInBackground(user, { ip, lockedUntilText });
+    throw new HttpError(LOCKED_STATUS, lockedMessage(LOCKOUT_MINUTES));
+  }
+  throw new HttpError(401, failedLoginMessage(attemptsLeft));
+};
+
+// A locked account is refused even with the right password. A user who
+// must set a new password first (temporary or expired password) gets the
+// limited 30-minute token.
 const login = async ({ Email, Password }, { ip }) => {
   const user = await findActiveUserByEmail(Email);
-  const isValidPassword = user?.PasswordHash ? await comparePassword(Password, user.PasswordHash) : false;
+  if (!user) throw new HttpError(401, INVALID_LOGIN_MESSAGE);
 
-  if (!isValidPassword) {
-    if (user) {
-      await recordAuthEvent({ ip, actorId: user.UserID, userId: user.UserID, actionType: AUTH_AUDIT_ACTIONS.LOGIN_FAILED });
-    }
-    throw new HttpError(401, "Invalid email or password.");
-  }
+  const minutesLeft = await lockMinutesLeft(user.UserID);
+  if (minutesLeft > 0) throw new HttpError(LOCKED_STATUS, lockedMessage(minutesLeft));
+
+  const isValidPassword = user.PasswordHash ? await comparePassword(Password, user.PasswordHash) : false;
+  if (!isValidPassword) await rejectWrongPassword(user, { ip });
 
   // Use sequelize.literal('GETDATE()') for SQL Server to prevent string-to-datetime conversion errors
   await user.update({
     LastLogin: sequelize.literal("GETDATE()"),
+    FailedLoginCount: 0,
+    LockedUntil: null,
   });
+  const mustChangePassword = needsPasswordChange(user);
   await recordAuthEvent({
     ip,
     actorId: user.UserID,
     userId: user.UserID,
     actionType: AUTH_AUDIT_ACTIONS.LOGIN,
-    newData: user.MustChangePassword ? { mustChangePassword: true } : null,
+    newData: mustChangePassword ? { mustChangePassword: true, passwordExpired: isPasswordExpired(user) } : null,
   });
 
   return buildSession(user);

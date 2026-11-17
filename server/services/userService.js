@@ -20,6 +20,7 @@ const { recordAuthEvent } = require("./authAudit.service");
 const { saveOwnPassword } = require("./authService");
 const { assertNewPasswordAllowed, replacePassword } = require("./password.service");
 const { sendNewAccountEmail, sendAdminResetEmail } = require("./authMail.service");
+const { clearLock } = require("./loginLockout.service");
 const { AUTH_AUDIT_ACTIONS } = require("../constants/password");
 
 const USER_IN_USE_MESSAGE =
@@ -244,7 +245,8 @@ const createUser = async ({ FullName, Email, MobileNo, RoleID }, { ip, actorId }
 
 // "E-mail new password": a new random temporary password is emailed and
 // the user must set their own at next sign-in. The email is sent before
-// commit, so if it fails the old password is kept.
+// commit, so if it fails the old password is kept. It also unlocks an
+// account locked after wrong passwords.
 const emailNewPassword = async (userId, { ip, actorId }) => {
   const user = await User.findByPk(userId);
   if (!user) throw new HttpError(404, "User not found.");
@@ -253,6 +255,8 @@ const emailNewPassword = async (userId, { ip, actorId }) => {
   const tempPassword = generateTempPassword();
   await sequelize.transaction(async (transaction) => {
     await replacePassword(user, tempPassword, { mustChange: true, transaction });
+    // Unlocks an account locked after wrong passwords straight away.
+    await clearLock(user, transaction);
     await sendAdminResetEmail({ name: user.FullName, email: user.Email, tempPassword });
   });
 

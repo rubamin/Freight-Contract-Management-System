@@ -84,6 +84,20 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+
+    // Wrong passwords in a row since the last successful sign-in or lock
+    // (migration_v19). Reaching MAX_FAILED_LOGINS sets LockedUntil.
+    FailedLoginCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    // Sign-in is refused until this time (SQL Server GETDATE() clock).
+    LockedUntil: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: "Users",

@@ -3,7 +3,7 @@
 // with the company red line, and every one carries a plain-text version.
 const { sendMail } = require("./mailer.service");
 const { CLIENT_URL } = require("../constants/email");
-const { OTP_VALID_MINUTES } = require("../constants/password");
+const { OTP_VALID_MINUTES, MAX_FAILED_LOGINS, LOCKOUT_MINUTES } = require("../constants/password");
 
 const COMPANY_RED = "#c8102e";
 const BRAND_NAME = "Freight Contract Management System";
@@ -117,8 +117,35 @@ const sendPasswordChangedEmail = ({ name, email }) =>
     withSignIn: true,
   }));
 
+const sendAccountLockedAdminEmail = ({ to, name, email, lockedUntil, ip }) =>
+  deliver(to.join(","), `Account locked: ${email}`, buildMessage({
+    heading: "A user account was locked",
+    before: [`${name || email} entered a wrong password ${MAX_FAILED_LOGINS} times in a row, so their account is locked for ${LOCKOUT_MINUTES} minutes.`],
+    details: [["User", name || "-"], ["Login ID", email], ["Locked until", lockedUntil], ["From IP address", ip || "-"]],
+    after: [
+      "It unlocks by itself when the time is up.",
+      "To unlock it now, open Users in the Freight Contract system and use \"E-mail new password\" for this user. They will get a temporary password and can sign in straight away.",
+      "If the user did not try to sign in, someone else may be guessing their password.",
+    ],
+    withSignIn: true,
+  }));
+
+const sendAccountLockedUserEmail = ({ name, email, lockedUntil }) =>
+  deliver(email, "Your account is locked", buildMessage({
+    heading: "Your account is locked",
+    before: [greeting(name), `A wrong password was entered ${MAX_FAILED_LOGINS} times in a row for your Freight Contract account, so it is locked for ${LOCKOUT_MINUTES} minutes.`],
+    details: [["Locked until", lockedUntil]],
+    after: [
+      "You can either wait until then and sign in again, or contact the IT department, who can reset your password straight away.",
+      "If this was not you, contact the IT department.",
+    ],
+    withSignIn: false,
+  }));
+
 module.exports = {
   EmailDeliveryError,
+  sendAccountLockedAdminEmail,
+  sendAccountLockedUserEmail,
   sendNewAccountEmail,
   sendAdminResetEmail,
   sendPasswordOtpEmail,

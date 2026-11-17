@@ -6,6 +6,11 @@ const nodemailer = require("nodemailer");
 // EMAIL_PORT / EMAIL_USER / EMAIL_PASS keys are still read when SMTP_*
 // is blank, so an existing .env keeps working until it is updated.
 //
+// Office 365: SMTP_HOST=smtp.office365.com, SMTP_PORT=587,
+// SMTP_SECURE=false (the connection is upgraded with STARTTLS, which is
+// required), and SMTP_FROM must be the SMTP_USER mailbox or one it may
+// send as.
+//
 // NOTE (Gmail): the password must be a 16-character Google App Password
 // (Google Account -> Security -> 2-Step Verification -> App passwords),
 // not the normal account password, or Gmail answers "535-5.7.8".
@@ -29,6 +34,8 @@ const readSmtpSettings = () => {
     host: env.SMTP_HOST || env.EMAIL_HOST || "",
     port,
     secure: env.SMTP_SECURE ? env.SMTP_SECURE === "true" : port === 465,
+    // On a non-SSL port, refuse to send unless STARTTLS succeeds.
+    requireTLS: env.SMTP_REQUIRE_TLS ? env.SMTP_REQUIRE_TLS === "true" : port !== 465,
     user,
     pass: env.SMTP_PASS || env.EMAIL_PASS || "",
     from: env.SMTP_FROM || user,
@@ -51,6 +58,8 @@ const getTransport = (settings) => {
       host: settings.host,
       port: settings.port,
       secure: settings.secure,
+      requireTLS: settings.requireTLS,
+      tls: { minVersion: "TLSv1.2" },
       auth: { user: settings.user, pass: settings.pass },
       connectionTimeout: SMTP_TIMEOUTS_MS.connection,
       greetingTimeout: SMTP_TIMEOUTS_MS.greeting,
