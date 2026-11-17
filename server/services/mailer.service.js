@@ -68,9 +68,35 @@ const logEmail = ({ to, subject, html, text }) => {
   console.log("----------------------------------------------------------------------");
 };
 
+// UAT: MAIL_REDIRECT_TO=you@company.com sends EVERY email to that address
+// (comma-separate for several) instead of the real recipients. The subject
+// and body show who it would have gone to. Leave it blank to send normally.
+const readRedirectAddress = () => (process.env.MAIL_REDIRECT_TO || "").trim();
+
+const escapeHtml = (value) =>
+  String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+
+const applyRedirect = ({ to, subject, html, text }) => {
+  const redirectTo = readRedirectAddress();
+  if (!redirectTo) return { to, subject, html, text };
+
+  const originalTo = Array.isArray(to) ? to.join(", ") : String(to || "");
+  const note = `UAT redirect - originally addressed to: ${originalTo}`;
+  return {
+    to: redirectTo,
+    subject: `[UAT -> ${originalTo}] ${subject}`,
+    html: html
+      ? `<div style="background:#fff3cd;border:1px solid #ffc107;padding:8px 12px;margin-bottom:12px;font-family:Arial,sans-serif;font-size:13px;">${escapeHtml(note)}</div>${html}`
+      : html,
+    text: text ? `${note}\n\n${text}` : text,
+  };
+};
+
 // Sends one email. Throws when it can't be sent (callers that must not
 // fail on email catch it themselves).
-const sendMail = async ({ to, subject, html, text, attachments = [] }) => {
+const sendMail = async (mail) => {
+  const { attachments = [] } = mail;
+  const { to, subject, html, text } = applyRedirect(mail);
   if (isDevLogEnabled()) {
     logEmail({ to, subject, html, text });
     return;
